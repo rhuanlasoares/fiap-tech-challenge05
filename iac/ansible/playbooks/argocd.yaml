@@ -1,0 +1,65 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    namespace: "argocd"
+    env_dir: "{{ env | default('k8s_kind') }}"
+    base_path: "../../../{{ env_dir }}"
+  tasks:
+    - name: Add ArgoCD Helm repository
+      ansible.builtin.command: "helm repo add argo https://argoproj.github.io/argo-helm"
+      register: output
+
+    - name: Verify output
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: Install ArgoCD Helm repository
+      ansible.builtin.command: >
+        helm upgrade --install argocd argo/argo-cd 
+        -n {{ namespace }} 
+        -f values/argocd-values.yaml
+      register: output
+
+    - name: Verify output
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: Patch argocd-server insecure mode
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - patch
+          - deployment
+          - argocd-server
+          - -n
+          - "{{ namespace }}"
+          - --type=json
+          - -p
+          - '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--insecure"}]'
+      register: output
+
+    - name: Verify output
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: Wait pods ArgoCD
+      ansible.builtin.command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n {{ namespace }} --timeout=600s"
+      register: output
+
+    - name: Verify output
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: Apply argocd
+      ansible.builtin.command: "kubectl apply -f {{ base_path }}/argocd/"
+      register: output
+
+    - name: Verify output
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes

@@ -1,0 +1,25 @@
+# argocd/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: donation-application
+  namespace: argocd
+  labels:
+    app: donation-service
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:rhuanlasoares/fiap-tech-challenge05.git
+    targetRevision: main
+    path: k8s/microsserivces/donation-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: donation-ns
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

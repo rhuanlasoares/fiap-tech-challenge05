@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: volunteer-service
+  namespace: volunteer-ns
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: "25%"
+      maxUnavailable: "25%"
+  selector:
+    matchLabels:
+      app: voluteer-service
+  template:
+    metadata:
+      labels:
+        app: voluteer-service
+    spec:
+      serviceAccountName: sa-gke
+      containers:
+        - name: volunteer-service
+          image: volunteer-service:latest
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            periodSeconds: 10
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            periodSeconds: 10
+            initialDelaySeconds: 15
+          ports:
+            - containerPort: 8083
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: volunteer-secrets-job
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: volunteer-secrets-job
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: volunteer-secrets-job
+                  key: AWS_SESSION_TOKEN
+            - name: PORT
+              valueFrom:
+                secretKeyRef:
+                  name: volunteer-secrets
+                  key: PORT
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: volunteer-secrets
+                  key: AWS_REGION
+            - name: DYNAMODB_TABLE
+              valueFrom:
+                secretKeyRef:
+                  name: volunteer-secrets
+                  key: DYNAMODB_TABLE
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=volunteer-ns,deployment.environment=production,service.name=volunteer-service"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "otlp"
+            - name: OTEL_SERVICE_NAME
+              value: "volunteer-service"
+          resources:
+            requests:
+              cpu: 16m
+              memory: 32Mi
+            limits:
+              cpu: 64m
+              memory: 128Mi
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: volunteer-service

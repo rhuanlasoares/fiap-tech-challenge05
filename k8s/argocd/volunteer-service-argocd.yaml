@@ -1,0 +1,25 @@
+# argocd/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: volunteer-application
+  namespace: argocd
+  labels:
+    app: volunteer-service
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:rhuanlasoares/fiap-tech-challenge05.git
+    targetRevision: main
+    path: k8s/microsserivces/volunteer-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: volunteer-ns
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

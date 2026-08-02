@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ngo-ns
+
+resources:
+- deployment.yaml
+- health-check.yaml
+- hpa.yaml
+- netpol.yaml
+- pdb.yaml
+- secret.yaml
+- serviceaccount.yaml
+- service.yaml
+
+labels:
+- includeSelectors: true
+  pairs:
+    app: ngo-service
+
+images:
+- name: ngo-service
+  newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-ngo/ngo-service
+  newTag: latest

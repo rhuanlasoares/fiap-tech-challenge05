@@ -1,0 +1,20 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: ngo-service-hc-policy
+  namespace: ngo-ns
+spec:
+  default:
+    checkIntervalSec: 5
+    timeoutSec: 5
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 8081
+        requestPath: /health
+  targetRef:
+    group: ""
+    kind: Service
+    name: ngo-service

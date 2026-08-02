@@ -1,0 +1,13 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: allow-secret-manager-global
+subjects:
+- kind: ServiceAccount
+  name: sa-gke
+  namespace: job-ns
+roleRef:
+  kind: ClusterRole
+  name: secret-creator-clusterrole
+  apiGroup: rbac.authorization.k8s.io

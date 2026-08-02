@@ -1,0 +1,99 @@
+resource "google_compute_subnetwork_iam_member" "member" {
+  project    = var.project_id
+  region     = var.region
+  subnetwork = var.subnet_name
+  role       = "roles/compute.networkUser"
+  member     = var.sa_gke_member
+}
+
+resource "google_project_iam_member" "sa_cloud_sql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = var.sa_gke_member
+}
+
+resource "google_project_iam_member" "sa_user" {
+  project = var.project_id
+  role    = "roles/iam.workloadIdentityUser"
+  member  = var.sa_gke_member
+}
+
+resource "google_project_iam_member" "kubernetes_developer" {
+  project = var.project_id
+  role    = "roles/container.developer"
+  member  = var.sa_gke_member
+}
+
+resource "google_artifact_registry_repository_iam_member" "artreg_member" {
+  for_each   = var.artreg
+  project    = var.project_id
+  location   = var.region
+  repository = each.value.name_artreg
+  role       = "roles/artifactregistry.reader"
+  member     = var.sa_gke_member
+}
+
+resource "google_project_iam_member" "sa_redis" {
+  project = var.project_id
+  role    = "roles/redis.editor"
+  member  = var.sa_gke_member
+}
+
+resource "google_storage_bucket_iam_member" "bucket_user" {
+  role   = "roles/storage.objectUser"
+  member = var.sa_gke_member
+  bucket = "gcs-loki-bucket-01"
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_member" {
+  for_each  = var.secrets
+  project   = var.project_id
+  secret_id = each.value.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = var.sa_gke_member
+}
+
+locals {
+  namespace_name = {
+    ngo-service       = "ngo-ns"
+    donation-service  = "donation-ns"
+    volunteer-service = "volunteer-ns"
+    job-service       = "job-ns"
+    argocd            = "argocd"
+    loki              = "monitoring-ns"
+  }
+}
+
+resource "google_service_account_iam_member" "sa_identity_gke" {
+  depends_on = [
+    google_artifact_registry_repository_iam_member.artreg_member,
+    google_compute_subnetwork_iam_member.member,
+    google_project_iam_member.sa_cloud_sql_client,
+    google_project_iam_member.sa_user,
+    google_project_iam_member.sa_redis,
+    google_secret_manager_secret_iam_member.secret_member,
+    google_project_iam_member.kubernetes_developer
+  ]
+  for_each           = local.namespace_name
+  service_account_id = var.sa_gke_name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${each.value}/${var.sa_inside_gke}]"
+}
+
+resource "google_service_account_iam_member" "sa_identity_gke_monitoring" {
+  service_account_id = var.sa_gke_name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[keda/keda-operator]"
+}
+
+resource "google_project_iam_member" "sa_identity_gke_keda" {
+  project = var.project_id
+  role    = "roles/monitoring.viewer"
+  member  = "principal://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.project_id}.svc.id.goog/subject/ns/keda/sa/keda-operator"
+}
+
+resource "google_project_iam_member" "sa_identity_gke_loki_bucket" {
+  project = var.project_id
+  role    = "roles/storage.objectUser"
+  member  = "principal://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.project_id}.svc.id.goog/subject/ns/monitoring-ns/sa/sa-gke"
+}

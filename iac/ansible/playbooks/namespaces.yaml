@@ -1,0 +1,21 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    env_dir: "{{ env | default('k8s_kind') }}"
+    base_path: "../../../{{ env_dir }}"
+  tasks:
+    - name: "Iniciando deploy no ambiente: {{ env_dir }}"
+      debug:
+        msg: "Aplicando manifestos de {{ base_path }}"
+        
+    - name: Create namespaces in GKE
+      ansible.builtin.command:
+        kubectl apply -f {{ base_path }}/namespaces/
+      register: output1
+      ignore_errors: yes
+
+    - name: Verificar a saída do output1
+      debug:
+        var: output1.stdout_lines
+      ignore_errors: yes

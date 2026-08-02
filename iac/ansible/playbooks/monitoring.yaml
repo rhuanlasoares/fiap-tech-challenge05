@@ -1,0 +1,112 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    env_dir: "{{ env | default('k8s_kind') }}"
+    base_path: "../../../{{ env_dir }}"
+  tasks:
+    - name: "Iniciando deploy no ambiente: {{ env_dir }}"
+      debug:
+        msg: "Aplicando manifestos de {{ base_path }}"
+    
+    # - name: Apply manifestos de monitoramento
+    #   ansible.builtin.command:
+    #     kubectl create configmap dashboard-customizado --from-file=dashboard/custom.json -n monitoring-ns
+    #   register: output8
+    #   ignore_errors: yes
+
+    # - name: Verificar a saída do output8
+    #   debug:
+    #     var: output8.stdout_lines
+    #   ignore_errors: yes
+
+    - name: Add prometheus-community Helm repo
+      ansible.builtin.command:
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      register: output1
+      ignore_errors: yes
+
+    - name: Verificar a saída do output1
+      debug:
+        var: output1.stdout_lines
+      ignore_errors: yes
+
+    - name: Repo update
+      ansible.builtin.command:
+        helm repo update
+      register: output2
+      ignore_errors: yes
+
+    - name: Verificar a saída do output2
+      debug:
+        var: output2.stdout_lines
+      ignore_errors: yes
+
+    - name: Install prometheus-community kube-prometheus-stack via Helm
+      ansible.builtin.command: >
+        helm install monitoring prometheus-community/kube-prometheus-stack \
+        -n monitoring-ns -f values/values-kps.yaml
+      register: output3
+      ignore_errors: yes
+
+    - name: Verificar a saída do output4
+      debug:
+        var: output3.stdout_lines
+      ignore_errors: yes
+
+    - name: Add Loki helm repo
+      ansible.builtin.command: >
+        helm repo add grafana https://grafana.github.io/helm-charts
+      register: output4
+      ignore_errors: yes
+
+    - name: Verificar a saída do output4
+      debug:
+        var: output4.stdout_lines
+      ignore_errors: yes
+
+    - name: Install Loki via Helm
+      ansible.builtin.command: >
+        helm install loki grafana/loki \
+        -n monitoring-ns -f values/values-loki.yaml
+      register: output5
+      ignore_errors: yes
+
+    - name: Verificar a saída do output5
+      debug:
+        var: output5.stdout_lines
+      ignore_errors: yes
+
+    - name: Add OpenTelemetry helm repo
+      ansible.builtin.command: >
+        helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+      register: output6
+      ignore_errors: yes
+
+    - name: Verificar a saída do output6  
+      debug:
+        var: output6.stdout_lines
+      ignore_errors: yes
+
+    - name: Install OpenTelemetry Collector via Helm
+      ansible.builtin.command: >
+        helm install opentelemetry-collector open-telemetry/opentelemetry-collector \
+        -n monitoring-ns -f values/values-otel.yaml
+      register: output7
+      ignore_errors: yes
+
+    - name: Verificar a saída do output7
+      debug:
+        var: output7.stdout_lines
+      ignore_errors: yes
+
+    - name: Apply manifestos de monitoramento
+      ansible.builtin.command:
+        kubectl apply -f {{ base_path }}/monitoring/
+      register: output8
+      ignore_errors: yes
+
+    - name: Verificar a saída do output8
+      debug:
+        var: output8.stdout_lines
+      ignore_errors: yes

@@ -1,0 +1,50 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    env_dir: "k8s_kind"
+    base_path: "./{{ env_dir }}"
+  tasks:
+    - name: Add Keda helm repo
+      ansible.builtin.command:
+        helm repo add kedacore https://kedacore.github.io/charts
+      register: output1
+      ignore_errors: yes
+
+    - name: Verificar a saída do output1
+      debug:
+        var: output1.stdout_lines
+      ignore_errors: yes
+
+    - name: Repo update
+      ansible.builtin.command:
+        helm repo update
+      register: output2
+      ignore_errors: yes
+
+    - name: Verificar a saída do output2
+      debug:
+        var: output2.stdout_lines
+      ignore_errors: yes
+
+    - name: Install Keda via helm
+      ansible.builtin.command:
+        helm install keda kedacore/keda -n keda
+      register: output3
+      ignore_errors: yes
+
+    - name: Verificar a saída do output3
+      debug:
+        var: output3.stdout_lines
+      ignore_errors: yes
+
+    - name: Install Keda HTTP add on via helm
+      ansible.builtin.command:
+        helm install http-add-on kedacore/keda-add-ons-http -n keda --set interceptor.responseHeaderTimeout=120s
+      register: output4
+      ignore_errors: yes
+
+    - name: Verificar a saída do output4
+      debug:
+        var: output4.stdout_lines
+      ignore_errors: yes

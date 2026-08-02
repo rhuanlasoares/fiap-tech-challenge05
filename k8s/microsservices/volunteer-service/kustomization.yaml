@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: volunteer-ns
+
+resources:
+- deployment.yaml
+- health-check.yaml
+- hpa.yaml
+- netpol.yaml
+- pdb.yaml
+- secret.yaml
+- serviceaccount.yaml
+- service.yaml
+
+labels:
+- includeSelectors: true
+  pairs:
+    app: volunteer-service
+
+images:
+- name: volunteer-service
+  newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-volunteer/volunteer-service
+  newTag: latest

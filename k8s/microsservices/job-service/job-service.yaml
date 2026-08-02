@@ -1,0 +1,189 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-service-secret
+  namespace: job-ns
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: job-service
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: sa-gke
+      containers:
+        - name: job-service-secret
+          image: google/cloud-sdk:alpine
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "128m"
+            limits:
+              memory: "256Mi"
+              cpu: "512m"
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+
+              gcloud config set project $PROJECT_ID
+
+              apk update
+
+              apk add --no-cache kubectl jq curl
+
+              # ── Fetch secrets uma única vez ──────────────────────────────
+              NGO_DB_SECRET_MANAGER=$(gcloud secrets versions access latest --secret=$NGO_DB_SECRET_MANAGER)
+              DONATION_DB_SECRET_MANAGER=$(gcloud secrets versions access latest --secret=$DONATION_DB_SECRET_MANAGER)
+              AWS_KEY_ID=$(gcloud secrets versions access latest --secret=$NAME_SM_ACCESS_KEY_ID)
+              AWS_SECRET=$(gcloud secrets versions access latest --secret=$NAME_SM_SECRET_ACCESS_KEY)
+              AWS_TOKEN=$(gcloud secrets versions access latest --secret=$NAME_SM_SESSION_TOKEN)
+              SQS_URL=$(gcloud secrets versions access latest --secret=$NAME_SM_SQS_QUEUE_URL)
+              NEW_RELIC_APIKEY=$(gcloud secrets versions access latest --secret=$NEW_RELIC_APIKEY)
+              # ─────────────────────────────────────────────────────────────
+
+              kubectl create secret generic donation-secrets-job -n donation-ns \
+                --from-literal=DB_PASSWORD="$DONATION_DB_SECRET_MANAGER" \
+                --from-literal=DATABASE_URL="postgres://$DB_USER:$DONATION_DB_SECRET_MANAGER@127.0.0.1:$DB_PORT/$DB_DONATION_NAME?sslmode=disable"
+              echo "🔐 Donation Secrets criados com sucesso!"
+
+              kubectl create secret generic ngo-secrets-job -n ngo-ns \
+                --from-literal=DB_PASSWORD="$NGO_DB_SECRET_MANAGER" \
+                --from-literal=DATABASE_URL="postgres://$DB_USER:$NGO_DB_SECRET_MANAGER@127.0.0.1:$DB_PORT/$DB_NGO_NAME?sslmode=disable"
+              echo "🔐 NGO Secrets criados com sucesso!"
+
+              kubectl create secret generic donation-secrets-job -n donation-ns \
+                --from-literal=AWS_ACCESS_KEY_ID="$AWS_KEY_ID" \
+                --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET" \
+                --from-literal=AWS_SESSION_TOKEN="$AWS_TOKEN" \
+                --from-literal=AWS_SQS_QUEUE_URL="$SQS_URL"
+              echo "🔐 Donation Secrets criados com sucesso!"
+
+              kubectl create secret generic ngo-secrets-job -n ngo-ns \
+                --from-literal=AWS_ACCESS_KEY_ID="$AWS_KEY_ID" \
+                --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET" \
+                --from-literal=AWS_SESSION_TOKEN="$AWS_TOKEN" \
+                --from-literal=AWS_SQS_QUEUE_URL="$SQS_URL"
+              echo "🔐 NGO Secrets criados com sucesso!"
+
+              kubectl create secret generic newrelic-api-key -n monitoring-ns \
+                --from-literal=NEW_RELIC_APIKEY="$NEW_RELIC_APIKEY"
+              echo "🔐 New Relic Secrets criados com sucesso!"
+
+              echo "⏳ Aguardando auth-service ficar saudável em $AUTH_SERVICE_URL/health..."
+
+              until [ "$(curl -s "$AUTH_SERVICE_URL/health" | jq -r '.status')" = "ok" ]; do
+                echo "Aguardando auth-service..."
+                sleep 3
+              done
+
+              echo "✅ Auth-service está UP!"
+
+              echo "🔐 Criando API Key..."
+
+              RESPONSE=$(curl -s -X POST "$AUTH_SERVICE_URL/admin/keys" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $MASTER_KEY" \
+                -d '{"name": "meu-primeiro-servico"}')
+
+              API_KEY=$(echo $RESPONSE | jq -r '.key')
+
+              echo "📦 Salvando API Key no Secret..."
+
+              kubectl create secret generic evaluation-api-key \
+                --namespace evaluation-ns \
+                --from-literal=API_KEY="$API_KEY"
+
+              echo "🔍 Buscando IP do Redis: $NAME_REDIS..."
+
+              IP_REDIS=$(gcloud redis instances describe "$NAME_REDIS" --region=$REGION_GCP --format="value(host)")
+
+              kubectl create secret generic evaluation-ip-redis \
+                --namespace evaluation-ns \
+                --from-literal=REDIS_URL="redis://$IP_REDIS:6379"
+
+              echo "🚀 Setup concluído com sucesso!"
+          env:
+            - name: PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: PROJECT_ID
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: DB_PORT
+            - name: NAME_REDIS
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: NAME_REDIS
+            - name: MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: MASTER_KEY
+            - name: AUTH_SERVICE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: AUTH_SERVICE_URL
+            - name: REGION_GCP
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: REGION_GCP
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: DB_USER
+            - name: AUTH_NAME_SECRET_MANAGER
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: AUTH_NAME_SECRET_MANAGER
+            - name: FLAG_NAME_SECRET_MANAGER
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: FLAG_NAME_SECRET_MANAGER
+            - name: TARGETING_NAME_SECRET_MANAGER
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: TARGETING_NAME_SECRET_MANAGER
+            - name: NAME_SM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: NAME_SM_ACCESS_KEY_ID
+            - name: NAME_SM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: NAME_SM_SECRET_ACCESS_KEY
+            - name: NAME_SM_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: NAME_SM_SESSION_TOKEN
+            - name: NAME_PERSONAL_ACCESS_TOKEN_GH
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: NAME_PERSONAL_ACCESS_TOKEN_GH
+            - name: NAME_SM_SQS_QUEUE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: NAME_SM_SQS_QUEUE_URL
+            - name: NEW_RELIC_APIKEY
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: NEW_RELIC_APIKEY

@@ -1,0 +1,85 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    env_dir: "{{ env | default('k8s_kind') }}"
+    base_path: "../../../{{ env_dir }}"
+  tasks:
+    - name: Apply gateway-api
+      ansible.builtin.command: "kubectl apply -f {{ base_path }}/gateway-api/"
+      register: output
+
+    - name: Verificar gateway-api
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: "Iniciando deploy no ambiente: {{ env_dir }}"
+      debug:
+        msg: "Aplicando manifestos de {{ base_path }}"
+        
+    - name: Apply job-service
+      ansible.builtin.command: "kubectl apply -f {{ base_path }}/job-service/"
+      register: output
+
+    - name: Verificar job-service
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: "Iniciando deploy no ambiente: {{ env_dir }}"
+      debug:
+        msg: "Aplicando manifestos de {{ base_path }}"
+
+    - name: Apply ngo-service
+      ansible.builtin.command: "kubectl apply -k {{ base_path }}/microsservices/ngo-service/"
+      register: output
+
+    - name: Verificar ngo-service
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+    
+    - name: Apply ngo-service http route
+      ansible.builtin.command: "kubectl apply -f {{ base_path }}/microsservices/ngo-service/ngo-http-route.yaml"
+      register: output
+
+    - name: Verificar ngo-service
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: Apply donation-service
+      ansible.builtin.command: "kubectl apply -k {{ base_path }}/microsservices/donation-service/"
+      register: output
+
+    - name: Verificar donation-service
+      debug:
+        var: output.stdout_lines
+    
+    - name: Apply donation-service http route
+      ansible.builtin.command: "kubectl apply -f {{ base_path }}/microsservices/donation-service/donation-http-route.yaml"
+      register: output
+
+    - name: Verificar donation-service
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+
+    - name: Apply volunteer-service
+      ansible.builtin.command: "kubectl apply -k {{ base_path }}/microsservices/volunteer-service/"
+      register: output
+
+    - name: Verificar volunteer-service
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
+    
+    - name: Apply volunteer-service http route
+      ansible.builtin.command: "kubectl apply -f {{ base_path }}/microsservices/volunteer-service/volunteer-http-route.yaml"
+      register: output
+
+    - name: Verificar volunteer-service
+      debug:
+        var: output.stdout_lines
+      ignore_errors: yes
