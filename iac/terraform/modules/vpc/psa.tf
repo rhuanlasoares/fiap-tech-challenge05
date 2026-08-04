@@ -2,6 +2,7 @@ resource "google_compute_global_address" "private_service_access" {
   name          = var.psa_name
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
+  address       = "10.3.0.0"
   prefix_length = 16
   network       = google_compute_network.vpc_network.self_link
   project       = var.project_id

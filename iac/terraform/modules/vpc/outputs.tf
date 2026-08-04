@@ -3,7 +3,7 @@ output "vpc_self_link" {
 }
 
 output "subnet_self_link" {
-  value = google_compute_subnetwork.subnet_gke.self_link
+  value = { for k, v in google_compute_subnetwork.subnets : k => v.self_link }
 }
 
 output "gke_ip_lb" {

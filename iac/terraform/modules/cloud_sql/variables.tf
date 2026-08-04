@@ -44,11 +44,6 @@ variable "sa_gke_email" {
   type = string
 }
 
-variable "ip_cidr_range_subnet_gke" {
-  type        = string
-  description = "The IP CIDR range for the GKE Subnetwork."
-}
-
 variable "database_name" {
   type = string
 }

@@ -14,6 +14,6 @@ variable "bucket_name" {
 }
 
 variable "labels_bucket" {
-  type = map(string)
+  type        = map(string)
   description = "Labels for bucket."
 }

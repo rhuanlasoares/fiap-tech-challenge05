@@ -8,14 +8,17 @@ variable "project_number" {
   description = "The Project number of the project where the resource will be created."
 }
 
-variable "region" {
-  type        = string
-  description = "The region where the Subnetwork will be created."
-}
-
-variable "subnet_name" {
-  type        = string
-  description = "The name of the Subnetwork."
+variable "subnets" {
+  type = map(object({
+    name                   = string
+    region                 = string
+    ip_cidr_range          = string
+    range_name_pods        = string
+    ip_cidr_range_pods     = string
+    range_name_services    = string
+    ip_cidr_range_services = string
+  }))
+  description = "Map of subnet configurations to create in the VPC."
 }
 
 variable "sa_gke_member" {
@@ -32,6 +35,7 @@ variable "artreg" {
   type = map(object({
     name_artreg = string
     description = string
+    region      = string
   }))
 }
 
@@ -44,4 +48,9 @@ variable "secrets" {
     secret_id   = string
     secret_data = string
   }))
+}
+
+variable "bucket_name" {
+  type        = string
+  description = "Bucket for Loki"
 }

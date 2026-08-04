@@ -1,7 +1,8 @@
 resource "google_compute_subnetwork_iam_member" "member" {
+  for_each   = var.subnets
   project    = var.project_id
-  region     = var.region
-  subnetwork = var.subnet_name
+  region     = each.value.region
+  subnetwork = each.value.name
   role       = "roles/compute.networkUser"
   member     = var.sa_gke_member
 }
@@ -27,7 +28,7 @@ resource "google_project_iam_member" "kubernetes_developer" {
 resource "google_artifact_registry_repository_iam_member" "artreg_member" {
   for_each   = var.artreg
   project    = var.project_id
-  location   = var.region
+  location   = each.value.region
   repository = each.value.name_artreg
   role       = "roles/artifactregistry.reader"
   member     = var.sa_gke_member
@@ -42,7 +43,7 @@ resource "google_project_iam_member" "sa_redis" {
 resource "google_storage_bucket_iam_member" "bucket_user" {
   role   = "roles/storage.objectUser"
   member = var.sa_gke_member
-  bucket = "gcs-loki-bucket-01"
+  bucket = var.bucket_name
 }
 
 resource "google_secret_manager_secret_iam_member" "secret_member" {

@@ -42,3 +42,8 @@ variable "sa_gke_member" {
   type        = string
   description = "The email of the GKE Service Account."
 }
+
+variable "should_be_create" {
+  type        = bool
+  description = "Enable or disable the creation of the GKE Cluster."
+}

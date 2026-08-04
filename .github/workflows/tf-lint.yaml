@@ -1,0 +1,47 @@
+name: Terraform Lint & Validate
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'iac/terraform/**'
+      - '.github/workflows/tf-lint.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'iac/terraform/**'
+      - '.github/workflows/tf-lint.yaml'
+  workflow_dispatch:
+
+jobs:
+  lint-and-validate:
+    name: Terraform Format & Validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: iac/terraform
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Check Terraform Formatting
+        id: fmt
+        run: terraform fmt -check -recursive
+
+      - name: Initialize Terraform (Backend Disabled)
+        id: init
+        run: terraform init -backend=false
+
+      - name: Validate Terraform Code
+        id: validate
+        run: terraform validate
+
+      

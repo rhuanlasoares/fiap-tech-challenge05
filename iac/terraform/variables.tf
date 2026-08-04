@@ -14,16 +14,6 @@ variable "region" {
   description = "The region where the Subnetwork will be created."
 }
 
-variable "range_name_pods" {
-  type        = string
-  description = "The name of the secondary IP range for Pods."
-}
-
-variable "range_name_services" {
-  type        = string
-  description = "The name of the secondary IP range for Services."
-}
-
 variable "zone" {
   type = string
 }
@@ -41,7 +31,7 @@ variable "bucket_name" {
 }
 
 variable "labels_bucket" {
-  type = map(string)
+  type        = map(string)
   description = "Labels for bucket."
 }
 
@@ -63,24 +53,17 @@ variable "vpc_name" {
   description = "The name of the VPC Network."
 }
 
-variable "subnet_name" {
-  type        = string
-  description = "The name of the Subnetwork."
-}
-
-variable "ip_cidr_range_subnet_gke" {
-  type        = string
-  description = "The IP CIDR range for the GKE Subnetwork."
-}
-
-variable "ip_cidr_range_pods" {
-  type        = string
-  description = "The IP CIDR range for the Pods secondary IP range."
-}
-
-variable "ip_cidr_range_services" {
-  type        = string
-  description = "The IP CIDR range for the Services secondary IP range."
+variable "subnets" {
+  type = map(object({
+    name                   = string
+    region                 = string
+    ip_cidr_range          = string
+    range_name_pods        = string
+    ip_cidr_range_pods     = string
+    range_name_services    = string
+    ip_cidr_range_services = string
+  }))
+  description = "Map of subnet configurations to create in the VPC."
 }
 
 variable "router_name" {
@@ -140,9 +123,12 @@ variable "replica_region" {
 }
 
 ### GKE Module Variables
-variable "gke_cluster_name" {
-  type        = string
-  description = "The name of the GKE Cluster."
+variable "gke" {
+  type = map(object({
+    cluster_name     = string
+    region           = string
+    should_be_create = bool
+  }))
 }
 
 variable "gke_resource_labels" {
@@ -154,6 +140,7 @@ variable "artreg" {
   type = map(object({
     name_artreg = string
     description = string
+    region      = string
   }))
 }
 

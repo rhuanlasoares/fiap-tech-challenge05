@@ -1,4 +1,6 @@
 resource "google_container_cluster" "gke_actions" {
+  count = var.should_be_create ? 1 : 0
+
   name     = var.gke_cluster_name
   location = var.region
   project  = var.project_id
@@ -12,10 +14,12 @@ resource "google_container_cluster" "gke_actions" {
     resource_limits {
       resource_type = "cpu"
       maximum       = 64
+      minimum       = 16
     }
     resource_limits {
       resource_type = "memory"
       maximum       = 128
+      minimum       = 32
     }
     auto_provisioning_defaults {
       oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -73,6 +77,7 @@ resource "google_container_cluster" "gke_actions" {
     gcfs_config {
       enabled = true
     }
+    spot = true
   }
 
   node_pool_defaults {
