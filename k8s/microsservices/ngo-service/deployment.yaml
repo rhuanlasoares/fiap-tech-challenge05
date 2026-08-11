@@ -31,7 +31,7 @@ spec:
             - name: CLOUDSQL_CONNECTION_NAME
               valueFrom:
                 secretKeyRef:
-                  name: ngo-secrets-job
+                  name: ngo-secrets
                   key: CLOUDSQL_CONNECTION_NAME
             - name: DB_PORT
               valueFrom:
@@ -40,22 +40,31 @@ spec:
                   key: DB_PORT
           securityContext:
             runAsNonRoot: true
+      terminationGracePeriodSeconds: 30
       containers:
         - name: ngo-service
-          image: ngo-service:latest
+          image: ngo-service
           imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
           livenessProbe:
             httpGet:
               path: /health
               port: 8081
+            initialDelaySeconds: 30
             periodSeconds: 10
-            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /health
               port: 8081
+            initialDelaySeconds: 20
             periodSeconds: 10
-            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           ports:
             - containerPort: 8081
           env:
@@ -64,6 +73,11 @@ spec:
                 secretKeyRef:
                   name: ngo-secrets
                   key: PORT
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ngo-secrets-job
+                  key: DATABASE_URL
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
@@ -82,12 +96,18 @@ spec:
               value: "ngo-service"
           resources:
             requests:
-              cpu: 16m
-              memory: 32Mi
+              cpu: 50m
+              memory: 64Mi
             limits:
-              cpu: 64m
-              memory: 128Mi
+              cpu: 250m
+              memory: 256Mi
       topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: ngo-service
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
           whenUnsatisfiable: DoNotSchedule

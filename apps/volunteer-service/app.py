@@ -39,7 +39,9 @@ def register_volunteer():
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
     
     volunteer_id = str(uuid.uuid4())
+    event_id = data.get('event_id') or str(uuid.uuid4())
     item = {
+        'event_id': event_id,
         'volunteer_id': volunteer_id,
         'name': data['name'],
         'email': data['email'],
@@ -67,6 +69,11 @@ def get_volunteers_by_ngo(ngo_id):
     except Exception as e:
         log.error(f"Erro ao buscar dados no DynamoDB: {e}")
         return jsonify({"error": "Erro interno"}), 500
+
+@app.route('/error', methods=['GET'])
+@app.route('/volunteer-service/error', methods=['GET'])
+def error():
+    return jsonify({"error": "Erro interno"}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8083))

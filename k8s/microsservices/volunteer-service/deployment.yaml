@@ -12,29 +12,38 @@ spec:
       maxUnavailable: "25%"
   selector:
     matchLabels:
-      app: voluteer-service
+      app: volunteer-service
   template:
     metadata:
       labels:
-        app: voluteer-service
+        app: volunteer-service
     spec:
       serviceAccountName: sa-gke
+      terminationGracePeriodSeconds: 30
       containers:
         - name: volunteer-service
-          image: volunteer-service:latest
+          image: volunteer-service
           imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
           livenessProbe:
             httpGet:
               path: /health
               port: 8083
+            initialDelaySeconds: 30
             periodSeconds: 10
-            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /health
               port: 8083
+            initialDelaySeconds: 20
             periodSeconds: 10
-            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           ports:
             - containerPort: 8083
           env:
@@ -63,11 +72,11 @@ spec:
                 secretKeyRef:
                   name: volunteer-secrets
                   key: AWS_REGION
-            - name: DYNAMODB_TABLE
+            - name: AWS_DYNAMODB_TABLE
               valueFrom:
                 secretKeyRef:
                   name: volunteer-secrets
-                  key: DYNAMODB_TABLE
+                  key: AWS_DYNAMODB_TABLE
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
@@ -86,12 +95,18 @@ spec:
               value: "volunteer-service"
           resources:
             requests:
-              cpu: 16m
-              memory: 32Mi
+              cpu: 50m
+              memory: 64Mi
             limits:
-              cpu: 64m
-              memory: 128Mi
+              cpu: 250m
+              memory: 256Mi
       topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: volunteer-service
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
           whenUnsatisfiable: DoNotSchedule

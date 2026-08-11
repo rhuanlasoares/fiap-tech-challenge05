@@ -1,0 +1,50 @@
+# kubecost-values.yaml
+# Production-ready Kubecost configuration
+
+# Unique identifier for this cluster
+global:
+  clusterId: "gke-samerica"
+
+# Enable persistent storage for cost data retention
+localStore:
+  persistentVolume:
+    # Enable persistent storage to retain data across restarts
+    enabled: true
+    # Storage size for cost data (adjust based on cluster size)
+    size: 32Gi
+    # Use your cluster's default storage class or specify one
+    storageClass: "standard"
+
+# Resource requests and limits for the local store pod
+  resources:
+    requests:
+      # Minimum CPU required for local storage
+      cpu: "500m"
+      # Minimum memory for storing cost data
+      memory: "1Gi"
+    limits:
+      # Maximum CPU allocation
+      cpu: "1000m"
+      # Maximum memory allocation
+      memory: "3Gi"
+
+# Resource requests and limits for the FinOps agent
+finopsagent:
+  resources:
+    requests:
+      # Minimum CPU required for cost calculations
+      cpu: "100m"
+      # Minimum memory for storing cost data
+      memory: "256Mi"
+    limits:
+      # Maximum CPU allocation
+      cpu: "1000m"
+      # Maximum memory allocation
+      memory: "2Gi"
+
+# Network costs tracking (requires cloud provider integration)
+networkCosts:
+  # Enable network cost tracking
+  enabled: true
+  # Set to true only if you want Prometheus scrape annotations
+  prometheusScrape: false

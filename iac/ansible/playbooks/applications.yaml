@@ -19,7 +19,7 @@
         msg: "Aplicando manifestos de {{ base_path }}"
         
     - name: Apply job-service
-      ansible.builtin.command: "kubectl apply -f {{ base_path }}/job-service/"
+      ansible.builtin.command: "kubectl apply -f {{ base_path }}/microsservices/job-service/"
       register: output
 
     - name: Verificar job-service

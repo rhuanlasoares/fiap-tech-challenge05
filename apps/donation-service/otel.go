@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -29,15 +30,30 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
+type otelLogWriter struct {
+	logger otelLog.Logger
+}
+
+func (w *otelLogWriter) Write(p []byte) (n int, err error) {
+	msg := strings.TrimSpace(string(p))
+	if msg != "" {
+		var rec otelLog.Record
+		rec.SetBody(otelLog.StringValue(msg))
+		w.logger.Emit(context.Background(), rec)
+	}
+	return len(p), nil
+}
+
 var (
-	tracer            oteltrace.Tracer
-	meter             metric.Meter
-	logger            otelLog.Logger
-	requestsTotal     metric.Int64Counter
-	requestDuration   metric.Float64Histogram
-	donationsCreated  metric.Int64Counter
-	donationAmount    metric.Float64Counter
-	donationErrors    metric.Int64Counter
+	tracer             oteltrace.Tracer
+	meter              metric.Meter
+	logger             otelLog.Logger
+	requestsTotal      metric.Int64Counter
+	requestDuration    metric.Float64Histogram
+	httpServerDuration metric.Float64Histogram
+	donationsCreated   metric.Int64Counter
+	donationAmount     metric.Float64Counter
+	donationErrors     metric.Int64Counter
 )
 
 const instrumentationScope = "donation-service"
@@ -45,18 +61,20 @@ const instrumentationScope = "donation-service"
 // InitOpenTelemetry initializes OTLP exporters for traces, metrics, and logs.
 // It returns a shutdown function to flush and release resources on service shutdown.
 func InitOpenTelemetry(ctx context.Context) (func(context.Context) error, error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "localhost:4317"
-	}
-
-	insecureStr := os.Getenv("OTEL_EXPORTER_OTLP_INSECURE")
-	insecure := strings.ToLower(insecureStr) == "true" || insecureStr == "1"
-
 	serviceName := os.Getenv("OTEL_SERVICE_NAME")
 	if serviceName == "" {
 		serviceName = "donation-service"
 	}
+
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
+	} else {
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+	}
+
+	insecure := os.Getenv("OTEL_EXPORTER_OTLP_INSECURE") != "false"
 
 	res, err := createResource(ctx, serviceName)
 	if err != nil {
@@ -122,6 +140,7 @@ func InitOpenTelemetry(ctx context.Context) (func(context.Context) error, error)
 	)
 	global.SetLoggerProvider(lp)
 	logger = global.GetLoggerProvider().Logger(instrumentationScope)
+	log.SetOutput(io.MultiWriter(os.Stdout, &otelLogWriter{logger: logger}))
 
 	log.Printf("OpenTelemetry initialized for service '%s' pointing to collector '%s' (insecure: %v)", serviceName, endpoint, insecure)
 
@@ -184,6 +203,16 @@ func initMetricInstruments() error {
 	requestDuration, err = meter.Float64Histogram(
 		"http_request_duration_seconds",
 		metric.WithDescription("HTTP request latency in seconds"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		return err
+	}
+
+	httpServerDuration, err = meter.Float64Histogram(
+		"http.server.request.duration",
+		metric.WithDescription("Duration of HTTP server requests"),
+		metric.WithUnit("s"),
 	)
 	if err != nil {
 		return err
@@ -301,11 +330,19 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
-		ctx, span := Tracer().Start(ctx, fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+
+		route := r.URL.Path
+		spanName := fmt.Sprintf("%s %s", r.Method, route)
+
+		ctx, span := Tracer().Start(ctx, spanName,
 			oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 			oteltrace.WithAttributes(
 				attribute.String("http.method", r.Method),
+				attribute.String("http.request.method", r.Method),
 				attribute.String("http.target", r.URL.Path),
+				attribute.String("url.path", r.URL.Path),
+				attribute.String("http.route", route),
+				attribute.String("http.scheme", "http"),
 			),
 		)
 		defer span.End()
@@ -318,7 +355,10 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		duration := time.Since(start).Seconds()
 		statusStr := strconv.Itoa(rw.statusCode)
 
-		span.SetAttributes(attribute.Int("http.status_code", rw.statusCode))
+		span.SetAttributes(
+			attribute.Int("http.status_code", rw.statusCode),
+			attribute.Int("http.response.status_code", rw.statusCode),
+		)
 		if rw.statusCode >= 400 {
 			span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", rw.statusCode))
 		} else {
@@ -326,9 +366,11 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		attrs := metric.WithAttributes(
-			attribute.String("method", r.Method),
-			attribute.String("path", r.URL.Path),
-			attribute.String("status", statusStr),
+			attribute.String("http.method", r.Method),
+			attribute.String("http.request.method", r.Method),
+			attribute.String("http.route", route),
+			attribute.String("http.status_code", statusStr),
+			attribute.String("http.response.status_code", statusStr),
 		)
 
 		if requestsTotal != nil {
@@ -337,5 +379,9 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		if requestDuration != nil {
 			requestDuration.Record(ctx, duration, attrs)
 		}
+		if httpServerDuration != nil {
+			httpServerDuration.Record(ctx, duration, attrs)
+		}
 	})
 }
+

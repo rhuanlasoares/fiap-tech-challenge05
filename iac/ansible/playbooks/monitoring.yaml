@@ -8,17 +8,6 @@
     - name: "Iniciando deploy no ambiente: {{ env_dir }}"
       debug:
         msg: "Aplicando manifestos de {{ base_path }}"
-    
-    # - name: Apply manifestos de monitoramento
-    #   ansible.builtin.command:
-    #     kubectl create configmap dashboard-customizado --from-file=dashboard/custom.json -n monitoring-ns
-    #   register: output8
-    #   ignore_errors: yes
-
-    # - name: Verificar a saída do output8
-    #   debug:
-    #     var: output8.stdout_lines
-    #   ignore_errors: yes
 
     - name: Add prometheus-community Helm repo
       ansible.builtin.command:

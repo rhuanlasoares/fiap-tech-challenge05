@@ -1,0 +1,20 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: kubecost-service-hc-policy
+  namespace: kubecost
+spec:
+  default:
+    checkIntervalSec: 5
+    timeoutSec: 5
+    healthyThreshold: 2
+    unhealthyThreshold: 6
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 9090
+        requestPath: /
+  targetRef:
+    group: ""
+    kind: Service
+    name: kubecost-frontend

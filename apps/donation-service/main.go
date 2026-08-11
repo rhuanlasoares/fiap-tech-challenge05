@@ -62,9 +62,22 @@ func main() {
 	}
 
 	db, err := sql.Open("pgx", dbURL)
-	if err != nil || db.Ping() != nil {
-		RecordError(ctx, err, "db_connection_error", "Erro ao conectar ao banco de dados")
-		log.Fatalf("Erro ao conectar ao banco de dados: %v", err)
+	if err != nil {
+		RecordError(ctx, err, "db_connection_error", "Erro ao abrir conexão com o banco de dados")
+		log.Fatalf("Erro ao abrir conexão com o banco de dados: %v", err)
+	}
+
+	var pingErr error
+	for attempts := 1; attempts <= 10; attempts++ {
+		if pingErr = db.Ping(); pingErr == nil {
+			break
+		}
+		log.Printf("[INFO] Aguardando banco de dados (tentativa %d/10): %v", attempts, pingErr)
+		time.Sleep(1 * time.Second)
+	}
+	if pingErr != nil {
+		RecordError(ctx, pingErr, "db_connection_error", "Erro ao conectar ao banco de dados")
+		log.Fatalf("Erro ao conectar ao banco de dados: %v", pingErr)
 	}
 	LogInfo(ctx, "Conectado ao PostgreSQL (donation-service).")
 

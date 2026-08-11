@@ -2,19 +2,19 @@
 kind: HTTPRoute
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
-  name: donation-httproute
-  namespace: donation-ns
+  name: kubecost-httproute
+  namespace: kubecost
 spec:
   parentRefs:
   - name: gateway-applications
     namespace: gateway-api-ns
   hostnames:
-  - "solidary-tech.${GATEWAY_IP}.nip.io"
+  - "kubecost.${GATEWAY_IP}.nip.io"
   rules:
   - matches:
     - path:
         type: PathPrefix
-        value: /donation-service
+        value: /
     backendRefs:
-    - name: donation-service
-      port: 80
+    - name: kubecost-frontend
+      port: 9090

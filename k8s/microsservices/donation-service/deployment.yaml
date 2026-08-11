@@ -31,7 +31,7 @@ spec:
             - name: CLOUDSQL_CONNECTION_NAME
               valueFrom:
                 secretKeyRef:
-                  name: donation-secrets-job
+                  name: donation-secrets
                   key: CLOUDSQL_CONNECTION_NAME
             - name: DB_PORT
               valueFrom:
@@ -40,25 +40,39 @@ spec:
                   key: DB_PORT
           securityContext:
             runAsNonRoot: true
+      terminationGracePeriodSeconds: 30
       containers:
         - name: donation-service
-          image: donation-service:latest
+          image: donation-service
           imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
           livenessProbe:
             httpGet:
               path: /health
               port: 8082
+            initialDelaySeconds: 25
             periodSeconds: 10
-            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /health
               port: 8082
-            periodSeconds: 10
             initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
           ports:
             - containerPort: 8082
           env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: donation-secrets-job
+                  key: DATABASE_URL
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -89,16 +103,6 @@ spec:
                 secretKeyRef:
                   name: donation-secrets
                   key: AWS_REGION
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: donation-secrets-job
-                  key: DATABASE_URL
-            - name: AWS_SQS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: donation-secrets-job
-                  key: AWS_SQS_URL
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
@@ -117,12 +121,18 @@ spec:
               value: "donation-service"
           resources:
             requests:
-              cpu: 16m
-              memory: 32Mi
+              cpu: 50m
+              memory: 64Mi
             limits:
-              cpu: 64m
-              memory: 128Mi
+              cpu: 250m
+              memory: 256Mi
       topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: donation-service
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
           whenUnsatisfiable: DoNotSchedule

@@ -9,7 +9,7 @@ resources:
 - netpol.yaml
 - pdb.yaml
 - secret.yaml
-- serviceaccount.yaml
+- service_account.yaml
 - service.yaml
 
 labels:
@@ -19,5 +19,5 @@ labels:
 
 images:
 - name: volunteer-service
-  newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-volunteer/volunteer-service
+  newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-volunteer-sa/volunteer-service
   newTag: latest

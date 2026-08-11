@@ -10,12 +10,11 @@ spec:
   minReplicaCount: 3
   maxReplicaCount: 20
   cooldownPeriod: 60
-
   triggers:
   - type: aws-sqs-queue
     authenticationRef:
       name: donation-trigger
     metadata:
-      queueURL: https://sqs.us-east-1.amazonaws.com/190170155286/toggle-master-analytics
+      queueURL: https://sqs.us-east-1.amazonaws.com/190170155286/solidary-tech
       queueLength: "10"
       awsRegion: "us-east-1"
