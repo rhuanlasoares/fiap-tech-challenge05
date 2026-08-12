@@ -95,11 +95,11 @@ spec:
               value: "volunteer-service"
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 78m
+              memory: 212Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 312m
+              memory: 512Mi
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname

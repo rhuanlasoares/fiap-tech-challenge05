@@ -3,11 +3,6 @@ deploymentMode: SimpleScalable
 loki:
   auth_enabled: false
 
-  chunksCache:
-    enabled: false
-  resultsCache:
-    enabled: false
-
   commonConfig:
     replication_factor: 2
 
@@ -46,6 +41,15 @@ loki:
   querier:
     max_concurrent: 4
 
+resultsCache:
+  enabled: true
+  allocatedMemory: 512
+  allocatedCPU: 150m
+
+chunksCache:
+  enabled: true
+  allocatedMemory: 1024
+  allocatedCPU: 150m
 serviceAccount:
   create: false
   name: sa-gke

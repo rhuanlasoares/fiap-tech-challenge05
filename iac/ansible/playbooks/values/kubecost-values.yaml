@@ -18,29 +18,50 @@ localStore:
 # Resource requests and limits for the local store pod
   resources:
     requests:
-      # Minimum CPU required for local storage
-      cpu: "500m"
-      # Minimum memory for storing cost data
-      memory: "1Gi"
+      cpu: 32m
+      memory: 128Mi
     limits:
       # Maximum CPU allocation
-      cpu: "1000m"
+      cpu: 64m
       # Maximum memory allocation
-      memory: "3Gi"
+      memory: 256Mi
 
 # Resource requests and limits for the FinOps agent
 finopsagent:
   resources:
     requests:
-      # Minimum CPU required for cost calculations
-      cpu: "100m"
-      # Minimum memory for storing cost data
-      memory: "256Mi"
+      cpu: 126m
+      memory: 310Mi
     limits:
-      # Maximum CPU allocation
-      cpu: "1000m"
-      # Maximum memory allocation
-      memory: "2Gi"
+      cpu: 500m
+      memory: 512Mi
+
+forecasting:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 225Mi
+    limits:
+      cpu: 64m
+      memory: 512Mi
+
+aggregator:
+  resources:
+    requests:
+      cpu: 714m
+      memory: 503Mi
+    limits:
+      cpu: 1500m
+      memory: 1Gi
+
+clusterController:
+  resources:
+    requests:
+      cpu: 32m
+      memory: 47Mi
+    limits:
+      cpu: 128m
+      memory: 128Mi
 
 # Network costs tracking (requires cloud provider integration)
 networkCosts:
@@ -48,3 +69,10 @@ networkCosts:
   enabled: true
   # Set to true only if you want Prometheus scrape annotations
   prometheusScrape: false
+  resources:
+    requests:
+      cpu: 58m
+      memory: 20Mi
+    limits:
+      cpu: 128m
+      memory: 128Mi

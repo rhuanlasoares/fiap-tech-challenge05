@@ -29,7 +29,7 @@
 
     - name: Install Keda via helm
       ansible.builtin.command:
-        helm install keda kedacore/keda -n keda
+        helm install keda kedacore/keda -n keda -f values/values-keda-http.yaml
       register: output3
       ignore_errors: yes
 
@@ -40,11 +40,11 @@
 
     - name: Install Keda HTTP add on via helm
       ansible.builtin.command:
-        helm install http-add-on kedacore/keda-add-ons-http -n keda --set interceptor.responseHeaderTimeout=120s
+        helm install http-add-on kedacore/keda-add-ons-http -n keda -f values/values-keda-adds-on.yaml
       register: output4
       ignore_errors: yes
 
     - name: Verificar a saída do output4
       debug:
         var: output4.stdout_lines
-      ignore_errors: yes
+      ignore_errors: yesl

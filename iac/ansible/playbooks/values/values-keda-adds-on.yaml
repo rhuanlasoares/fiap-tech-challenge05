@@ -1,0 +1,18 @@
+scaler:
+  resources:
+    requests:
+      cpu: 16m
+      memory: 32Mi
+
+interceptor:
+  responseHeaderTimeout: 120s
+  resources:
+    requests:
+      cpu: 16m
+      memory: 32Mi
+
+operator:
+  resources:
+    requests:
+      cpu: 16m
+      memory: 32Mi

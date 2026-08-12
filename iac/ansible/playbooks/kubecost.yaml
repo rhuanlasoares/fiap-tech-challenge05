@@ -33,7 +33,7 @@
 
     - name: Install or Upgrade Kubecost Helm Chart
       ansible.builtin.command:
-        helm upgrade --install kubecost kubecost/kubecost -n kubecost --create-namespace -f values/kubecost-values.yaml
+        helm upgrade --install kubecost kubecost/kubecost -n kubecost -f values/kubecost-values.yaml
       register: output3
       ignore_errors: yes
 

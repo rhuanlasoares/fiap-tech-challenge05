@@ -18,11 +18,11 @@ spec:
           image: google/cloud-sdk:alpine
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "128m"
+              memory: 128Mi
+              cpu: 768m
             limits:
-              memory: "256Mi"
-              cpu: "512m"
+              memory: 256Mi
+              cpu: 1024m
           command:
             - sh
             - -c
