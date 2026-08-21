@@ -1,0 +1,34 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: volunteer-golden-signals-analysis
+  namespace: volunteer-ns
+spec:
+  args:
+    - name: canary-hash
+  metrics:
+    # 1. 🚨 Verifica Taxa de Sucesso exclusiva dos Pods Canary
+    - name: success-rate
+      interval: 30s
+      successCondition: len(result) == 0 || result[0] >= 0.95
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090
+          query: |
+            (
+              sum(rate(http_requests_total{service_name="volunteer-service", status!~"5..", pod=~".*{{args.canary-hash}}.*"}[2m]))
+              /
+              sum(rate(http_requests_total{service_name="volunteer-service", pod=~".*{{args.canary-hash}}.*"}[2m]))
+            )
+
+    # 2. ⏱️ Verifica Latência P95 exclusiva dos Pods Canary
+    - name: latency-p95
+      interval: 30s
+      successCondition: len(result) == 0 || result[0] <= 500
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090
+          query: |
+            histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{service_name="volunteer-service", pod=~".*{{args.canary-hash}}.*"}[2m])) by (le))

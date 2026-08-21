@@ -34,16 +34,11 @@ resource "google_artifact_registry_repository_iam_member" "artreg_member" {
   member     = var.sa_gke_member
 }
 
-resource "google_project_iam_member" "sa_redis" {
-  project = var.project_id
-  role    = "roles/redis.editor"
-  member  = var.sa_gke_member
-}
-
 resource "google_storage_bucket_iam_member" "bucket_user" {
+  for_each = var.buckets
   role   = "roles/storage.objectUser"
   member = var.sa_gke_member
-  bucket = var.bucket_name
+  bucket = each.value.bucket_name
 }
 
 resource "google_secret_manager_secret_iam_member" "secret_member" {
@@ -62,6 +57,7 @@ locals {
     job-service       = "job-ns"
     argocd            = "argocd"
     loki              = "monitoring-ns"
+    velero = "velero"
   }
 }
 
@@ -71,7 +67,6 @@ resource "google_service_account_iam_member" "sa_identity_gke" {
     google_compute_subnetwork_iam_member.member,
     google_project_iam_member.sa_cloud_sql_client,
     google_project_iam_member.sa_user,
-    google_project_iam_member.sa_redis,
     google_secret_manager_secret_iam_member.secret_member,
     google_project_iam_member.kubernetes_developer
   ]

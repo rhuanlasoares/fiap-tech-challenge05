@@ -1,0 +1,122 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: golden-signals-alerts
+  namespace: monitoring-ns
+  labels:
+    role: alert-rules
+    prometheus: kube-prometheus-stack
+    release: monitoring
+spec:
+  groups:
+    - name: golden-signals.rules
+      rules:
+        # =========================================================================
+        # 1. ⏱️ LATÊNCIA (Latency) - Tempo para atender requisições
+        # =========================================================================
+        - alert: HighLatencyP95
+          expr: |
+            histogram_quantile(0.95, 
+              sum(rate(http_server_duration_milliseconds_bucket{service_name=~"ngo-service|donation-service|volunteer-service"}[5m])) 
+              by (le, service_name, namespace)
+            ) > 500
+          for: 2m
+          labels:
+            severity: warning
+            signal: latency
+          annotations:
+            summary: "Latência P95 alta no serviço {{ $labels.service_name }}"
+            description: "O P95 da latência está em {{ $value | humanizeDuration }} (limite: 500ms) por mais de 2 minutos."
+
+        - alert: CriticalLatencyP99
+          expr: |
+            histogram_quantile(0.99, 
+              sum(rate(http_server_duration_milliseconds_bucket{service_name=~"ngo-service|donation-service|volunteer-service"}[5m])) 
+              by (le, service_name, namespace)
+            ) > 1500
+          for: 1m
+          labels:
+            severity: critical
+            signal: latency
+          annotations:
+            summary: "Latência crítica P99 no serviço {{ $labels.service_name }}"
+            description: "O P99 da latência ultrapassou 1.5s (valor atual: {{ $value | humanizeDuration }})."
+
+        # =========================================================================
+        # 2. 🚦 TRÁFEGO (Traffic) - Demanda / Taxa de Requisições por Segundo (RPS)
+        # =========================================================================
+        - alert: TrafficSpikeDetected
+          expr: |
+            sum(rate(http_requests_total{service_name=~"ngo-service|donation-service|volunteer-service"}[2m])) by (service_name, namespace)
+            > 2 * avg_over_time(sum(rate(http_requests_total{service_name=~"ngo-service|donation-service|volunteer-service"}[1h])) by (service_name, namespace)[1h:])
+          for: 2m
+          labels:
+            severity: warning
+            signal: traffic
+          annotations:
+            summary: "Pico repentino de tráfego em {{ $labels.service_name }}"
+            description: "O tráfego aumentou mais de 200% em relação à média da última hora (atual: {{ $value | humanize }} req/s)."
+
+        - alert: TrafficDropAnomaly
+          expr: |
+            sum(rate(http_requests_total{service_name=~"ngo-service|donation-service|volunteer-service"}[5m])) by (service_name, namespace) == 0
+            and
+            sum(rate(http_requests_total{service_name=~"ngo-service|donation-service|volunteer-service"}[1h] offset 10m)) by (service_name, namespace) > 5
+          for: 3m
+          labels:
+            severity: critical
+            signal: traffic
+          annotations:
+            summary: "Queda total de tráfego no serviço {{ $labels.service_name }}"
+            description: "Nenhuma requisição recebida nos últimos 5 minutos, embora houvesse tráfego regular anteriormente."
+
+        # =========================================================================
+        # 3. 🚨 ERROS (Errors) - Taxa de falhas HTTP 5xx
+        # =========================================================================
+        - alert: HighHttpErrorRate5xx
+          expr: |
+            (
+              sum(rate(http_requests_total{status=~"5..", service_name=~"ngo-service|donation-service|volunteer-service"}[2m])) by (service_name, namespace)
+              /
+              sum(rate(http_requests_total{service_name=~"ngo-service|donation-service|volunteer-service"}[2m])) by (service_name, namespace)
+            ) * 100 > 5
+          for: 1m
+          labels:
+            severity: critical
+            signal: errors
+          annotations:
+            summary: "Taxa de erro 5xx crítica em {{ $labels.service_name }}"
+            description: "A taxa de erros 5xx está em {{ $value | printf \"%.2f\" }}% das requisições totais (limite: 5%)."
+
+        # =========================================================================
+        # 4. 🎛️ SATURAÇÃO (Saturation) - Esgotamento de Recursos (CPU, Memória, Conexões)
+        # =========================================================================
+        - alert: ContainerMemorySaturation
+          expr: |
+            (
+              container_memory_working_set_bytes{container=~"ngo-service|donation-service|volunteer-service"}
+              /
+              kube_pod_container_resource_limits{resource="memory", container=~"ngo-service|donation-service|volunteer-service"}
+            ) * 100 > 85
+          for: 2m
+          labels:
+            severity: warning
+            signal: saturation
+          annotations:
+            summary: "Memória próxima do limite (OOM Risk) no Pod {{ $labels.pod }}"
+            description: "O container {{ $labels.container }} está usando {{ $value | printf \"%.2f\" }}% do limite de memória."
+
+        - alert: ContainerCpuSaturation
+          expr: |
+            (
+              sum(rate(container_cpu_usage_seconds_total{container=~"ngo-service|donation-service|volunteer-service"}[3m])) by (pod, namespace, container)
+              /
+              sum(kube_pod_container_resource_limits{resource="cpu", container=~"ngo-service|donation-service|volunteer-service"}) by (pod, namespace, container)
+            ) * 100 > 85
+          for: 2m
+          labels:
+            severity: warning
+            signal: saturation
+          annotations:
+            summary: "CPU saturada no Pod {{ $labels.pod }}"
+            description: "O container {{ $labels.container }} atingiu {{ $value | printf \"%.2f\" }}% da quota de CPU."

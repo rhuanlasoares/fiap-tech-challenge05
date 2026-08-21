@@ -1,0 +1,114 @@
+##
+## Configurações do Velero para GCP (GCS + Workload Identity)
+##
+
+# Imagem do Velero
+image:
+  repository: docker.io/velero/velero
+  tag: v1.18.1
+  pullPolicy: IfNotPresent
+
+# Plugin oficial da GCP para o Velero (OBRIGATÓRIO)
+initContainers:
+  - name: velero-plugin-for-gcp
+    image: velero/velero-plugin-for-gcp:v1.11.1
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# Recursos do Deployment do Velero
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Configuração de Storage e Snapshots
+configuration:
+  # 1. Localização do Backup no Google Cloud Storage (GCS)
+  backupStorageLocation:
+    - name: default
+      provider: gcp
+      bucket: gcs-velero-bucket-solidary-tech-rh
+      prefix: velero
+      default: true
+      accessMode: ReadWrite
+      config:
+        # Se usar Workload Identity, informe o e-mail da GCP Service Account aqui:
+        serviceAccount: sa-gke
+
+  # 2. Localização de Snapshots de Discos GCP (Persistent Disks)
+  volumeSnapshotLocation:
+    - name: default
+      provider: gcp
+      config:
+        project: "ces-igniteprogram" # <-- Seu Project ID da GCP
+        # snapshotLocation: southamerica-east1 # Opcional: região dos snapshots
+
+  # Configurações do Servidor
+  defaultBackupTTL: 720h # Retenção de 30 dias por padrão
+  uploaderType: kopia    # Mecanismo moderno para backup de volumes de arquivos
+
+# Configuração do ServiceAccount do Kubernetes com Workload Identity do GKE
+serviceAccount:
+  server:
+    create: false
+    name: sa-gke
+
+# Como estamos usando Workload Identity, definimos useSecret como false
+credentials:
+  useSecret: false
+
+# Habilita o Node Agent (para backup de PVCs e arquivos locais via Kopia)
+deployNodeAgent: true
+
+nodeAgent:
+  podVolumePath: /var/lib/kubelet/pods
+  privileged: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Métricas para Prometheus
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+
+# Agendamentos Automáticos de Backup em Camadas (Tiered Backup)
+schedules:
+  # 🔴 1. Backup Frequente de Microsserviços Críticos (A cada 1 hora / RPO baixo)
+  critical-services:
+    disabled: false
+    schedule: "*/30 * * * *" # Executa a cada 1 hora no minuto zero (ex: 01:00, 02:00, 03:00...)
+    # Para executar a cada 30 minutos, use: "*/30 * * * *"
+    template:
+      ttl: "168h" # Retém por 7 dias
+      storageLocation: default
+      includeClusterResources: false # Foco apenas nos recursos dos namespaces
+      includedNamespaces:
+        - ngo-ns
+        - donation-ns
+        - volunteer-ns
+
+  # 🔵 2. Backup Diário Completo do Cluster (Infraestrutura, Gateways, Keda, etc.)
+  daily-full-cluster:
+    disabled: false
+    schedule: "0 3 * * *" # Executa todos os dias às 03:00 UTC
+    template:
+      ttl: "720h" # Retém por 30 dias
+      storageLocation: default
+      includeClusterResources: true
+      includedNamespaces:
+        - "*"
+      excludedNamespaces:
+        - kube-system
+        - velero # Recomendado excluir o próprio Velero do backup
+

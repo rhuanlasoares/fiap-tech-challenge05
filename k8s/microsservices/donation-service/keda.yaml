@@ -1,4 +1,3 @@
----
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -8,13 +7,24 @@ spec:
   scaleTargetRef:
     name: donation-service
   minReplicaCount: 3
-  maxReplicaCount: 20
+  maxReplicaCount: 15
   cooldownPeriod: 60
   triggers:
-  - type: aws-sqs-queue
-    authenticationRef:
-      name: donation-trigger
-    metadata:
-      queueURL: https://sqs.us-east-1.amazonaws.com/190170155286/solidary-tech
-      queueLength: "10"
-      awsRegion: "us-east-1"
+    # 🔴 Trigger 1: Fila AWS SQS (Trabalho Assíncrono)
+    # Escala quando a fila tiver mais de 10 mensagens por pod
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: donation-trigger
+      metadata:
+        queueURL: https://sqs.us-east-1.amazonaws.com/190170155286/solidary-tech
+        queueLength: "10"
+        awsRegion: "us-east-1"
+
+    # 🔵 Trigger 2: Tráfego HTTP / Golden Signal via Prometheus (Trabalho Síncrono)
+    # Escala quando as requisições HTTP ultrapassarem 50 req/s por pod
+    - type: prometheus
+      metadata:
+        serverAddress: http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090
+        metricName: http_requests_per_second
+        query: sum(rate(http_requests_total{service_name="donation-service"}[2m]))
+        threshold: "50"

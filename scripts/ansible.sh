@@ -19,4 +19,5 @@ ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/keda.yaml -e "env=$
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/monitoring.yaml -e "env=$K8S_DIR"
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/kubecost.yaml -e "env=$K8S_DIR"
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/argocd.yaml -e "env=$K8S_DIR"
+ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/argo-rollouts.yaml -e "env=$K8S_DIR"
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/applications.yaml -e "env=$K8S_DIR"

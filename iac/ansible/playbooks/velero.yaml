@@ -1,0 +1,43 @@
+﻿---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    env_dir: "{{ env | default('k8s_kind') }}"
+    base_path: "../../../{{ env_dir }}"
+  tasks:
+    - name: "Iniciando deploy no ambiente: {{ env_dir }}"
+      debug:
+        msg: "Aplicando manifestos de {{ base_path }}"
+
+    - name: Add Velero Helm Repo
+      ansible.builtin.command:
+        helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+      register: output1
+      ignore_errors: yes
+
+    - name: Verificar a saída do output1
+      debug:
+        var: output1.stdout_lines
+      ignore_errors: yes
+
+    - name: Helm repo update
+      ansible.builtin.command:
+        helm repo update
+      register: output2
+      ignore_errors: yes
+
+    - name: Verificar a saída do output2
+      debug:
+        var: output2.stdout_lines
+      ignore_errors: yes
+
+    - name: Install or Upgrade Velero Helm Chart
+      ansible.builtin.command:
+        helm upgrade --install velero vmware-tanzu/velero -n velero -f values/values-velero.yaml
+      register: output3
+      ignore_errors: yes
+
+    - name: Verificar a saída do output3
+      debug:
+        var: output3.stdout_lines
+      ignore_errors: yes

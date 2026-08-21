@@ -1,3 +1,13 @@
+﻿livenessProbe:
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 5
+  timeoutSeconds: 3
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  failureThreshold: 5
+  timeoutSeconds: 3
 mode: "deployment"
 
 fullnameOverride: "opentelemetry-collector"
@@ -19,6 +29,14 @@ extraEnvs:
         name: newrelic-api-key
         key: NEW_RELIC_APIKEY
 
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
 ports:
   otlp:
     enabled: true
@@ -35,8 +53,17 @@ ports:
     containerPort: 8888
     servicePort: 8888
     protocol: TCP
+  health-check:
+    enabled: true
+    containerPort: 13133
+    servicePort: 13133
+    protocol: TCP
 
 config:
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
+
   receivers:
     otlp:
       protocols:

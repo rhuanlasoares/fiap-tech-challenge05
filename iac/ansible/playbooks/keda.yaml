@@ -47,4 +47,4 @@
     - name: Verificar a saída do output4
       debug:
         var: output4.stdout_lines
-      ignore_errors: yesl
+      ignore_errors: yes

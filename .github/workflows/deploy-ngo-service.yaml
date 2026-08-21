@@ -1,0 +1,90 @@
+﻿name: 🔐 Pipeline — ngo-service (Python)
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/ngo-service/**"]
+  pull_request:
+    branches: [main]
+    paths: ["apps/ngo-service/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+  security-events: write
+
+env:
+  SERVICE: ngo-service
+  LANGUAGE: python
+  PYTHON_VERSION: "3.14.7"
+  SERVICE_PATH: apps/ngo-service
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  lint:
+    name: 🔍 Lint
+    uses: ./.github/workflows/reusable-lint.yaml
+    with:
+      language: python
+      service_path: apps/ngo-service
+      python_version: "3.14.7"
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sca:
+    name: 📦 SCA
+    needs: lint
+    uses: ./.github/workflows/reusable-sca.yaml
+    with:
+      language: python
+      service_path: apps/ngo-service
+      block_on_critical: true
+      python_version: "3.14.7"
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: 🔒 SAST
+    needs: lint
+    uses: ./.github/workflows/reusable-sast.yaml
+    with:
+      language: python
+      service_path: apps/ngo-service
+      block_on_critical: true
+      python_version: "3.14.7"
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container-scan:
+    name: 🐳 Container Scan & Local Build
+    needs: [sca, sast]
+    uses: ./.github/workflows/reusable-container-scan.yaml
+    with:
+      service_path: apps/ngo-service
+      image_name: ngo-service
+      image_tag: ${{ github.sha }}
+      block_on_critical: true
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-push-gitops:
+    name: 🚀 Build, Push and Update GitOps Manifests
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    needs: container-scan
+    uses: ./.github/workflows/build-push-gitops.yaml
+    with:
+      imageName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-ngo-sa/ngo-service
+      imageTag: ${{ github.sha }}
+      nameService: ngo-service
+      region: southamerica-east1
+      service_path: apps/ngo-service
+    secrets:
+      PROJECT_ID: ces-igniteprogram
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}

@@ -19,22 +19,26 @@ jobs:
   lint-and-validate:
     name: Terraform Format & Validation
     runs-on: ubuntu-latest
+    
+    # 🔑 1. Permissão necessária para o bot fazer git push
+    permissions:
+      contents: write
+
     defaults:
       run:
         working-directory: iac/terraform
 
     steps:
+      # 📥 2. Checkout na branch correta (inclusive em Pull Requests)
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
-
-      - name: Check Terraform Formatting
-        id: fmt
-        run: terraform fmt -check -recursive
 
       - name: Initialize Terraform (Backend Disabled)
         id: init
@@ -44,4 +48,26 @@ jobs:
         id: validate
         run: terraform validate
 
-      
+      # 🎨 3. Formata os arquivos Terraform recursivamente (modifica os arquivos)
+      - name: Auto-format Terraform Code
+        id: auto_fmt
+        run: terraform fmt -recursive
+
+      # 💾 4. Comita e envia as correções de formatação se houver mudanças
+      - name: 💾 Commit and push changes
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+          git add .
+          
+          if git diff --staged --quiet; then
+            echo "⚠️ No formatting changes needed."
+          else
+            # [skip ci] evita loop infinito de execuções no GitHub Actions
+            git commit -m "style(terraform): auto-format files [skip ci]"
+            git push origin HEAD:${{ github.head_ref || github.ref_name }}
+            echo "✅ Formatted files pushed to repository."
+          fi
+        
+          git status

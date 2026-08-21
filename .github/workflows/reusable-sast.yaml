@@ -1,0 +1,542 @@
+name: ♻️ Reusable — SAST
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+      service_path:
+        required: true
+        type: string
+      go_version:
+        required: false
+        type: string
+        default: "1.25"
+      python_version:
+        required: false
+        type: string
+        default: "3.13.13"
+      block_on_critical:
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      TOKEN:
+        required: true
+
+jobs:
+  sast-go:
+    if: inputs.language == 'golang'
+    name: SAST Go (${{ inputs.service_path }})
+    runs-on: ubuntu-latest
+    steps:
+      # Clona o código do repositório para o runner, permitindo a análise dos arquivos
+      - uses: actions/checkout@v4
+
+      # Configura o ambiente Go instalando a versão especificada nos inputs e ativando o cache de dependências
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache-dependency-path: ${{ inputs.service_path }}/go.sum
+
+      # Instala o gosec, que é a ferramenta padrão de análise estática de segurança (SAST) para Go
+      - name: Install Gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      # Executa a varredura sem filtro de severidade (-severity=low) para capturar
+      # todos os níveis: LOW, MEDIUM, HIGH, CRITICAL.
+      # O -confidence=low garante que nenhum finding seja silenciado por confiança baixa.
+      - name: Gosec Analysis
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          gosec \
+            -fmt=json \
+            -out=gosec-results.json \
+            -severity=low \
+            -confidence=low \
+            -exclude-generated \
+            ./... || true
+
+          # Relatório legível no log, também sem filtros
+          gosec \
+            -fmt=text \
+            -severity=low \
+            -confidence=low \
+            -exclude-generated \
+            ./... || true
+
+          cat gosec-results.json
+
+      # Lê o JSON gerado pelo gosec e separa os findings por nível de severidade.
+      # Bloqueia o pipeline (exit 1) apenas quando há findings HIGH ou CRITICAL.
+      # Findings LOW e MEDIUM são reportados no log mas não bloqueiam.
+      - name: Check Critical Findings
+        if: inputs.block_on_critical == true
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+
+          with open("gosec-results.json") as f:
+              data = json.load(f)
+
+          issues = data.get("Issues", [])
+
+          # Agrupa por severidade
+          by_severity = {"LOW": [], "MEDIUM": [], "HIGH": [], "CRITICAL": []}
+          for issue in issues:
+              sev = issue.get("severity", "LOW").upper()
+              by_severity.setdefault(sev, []).append(issue)
+
+          total   = len(issues)
+          low     = len(by_severity.get("LOW",      []))
+          medium  = len(by_severity.get("MEDIUM",   []))
+          high    = len(by_severity.get("HIGH",     []))
+          critical= len(by_severity.get("CRITICAL", []))
+
+          print("══════════════════════════════════════")
+          print("  gosec — Resumo de findings")
+          print("══════════════════════════════════════")
+          print(f"  LOW      : {low}")
+          print(f"  MEDIUM   : {medium}")
+          print(f"  HIGH     : {high}")
+          print(f"  CRITICAL : {critical}")
+          print(f"  TOTAL    : {total}")
+          print("══════════════════════════════════════")
+
+          blocking = high + critical
+          if blocking > 0:
+              print(f"\n❌ BLOQUEIO: {blocking} finding(s) de severidade HIGH/CRITICAL detectado(s).")
+              print("   Corrija as vulnerabilidades antes de prosseguir.")
+              sys.exit(1)
+
+          if medium > 0:
+              print(f"\n⚠️  ATENÇÃO: {medium} finding(s) MEDIUM. Revise antes do próximo ciclo.")
+
+          if low > 0:
+              print(f"\nℹ️  INFO: {low} finding(s) LOW registrado(s) para rastreabilidade.")
+
+          print("\n✅ Nenhum finding HIGH/CRITICAL. Pipeline liberada.")
+          PYEOF
+
+      # Lê o JSON do Gosec com jq e gera Markdown estruturado para a Issue.
+      # A tabela de resumo no topo já mostra a distribuição por severidade,
+      # e cada finding traz seu nível explicitamente.
+      - name: Gerar relatório Gosec
+        if: always()
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          REPORT_FILE="../issue-gosec.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[SAST][Go] Gosec — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [security, sast, gosec]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🔍 Gosec — Análise Estática de Segurança (Go)" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          if [ ! -f "gosec-results.json" ] || [ "$(jq '.Issues | length' gosec-results.json)" -eq 0 ]; then
+            echo "✅ Nenhuma vulnerabilidade encontrada pelo Gosec." >> $REPORT_FILE
+          else
+            # Tabela de resumo por severidade
+            TOTAL=$(jq '.Issues | length' gosec-results.json)
+            LOW=$(jq '[.Issues[] | select(.severity == "LOW")] | length' gosec-results.json)
+            MEDIUM=$(jq '[.Issues[] | select(.severity == "MEDIUM")] | length' gosec-results.json)
+            HIGH=$(jq '[.Issues[] | select(.severity == "HIGH")] | length' gosec-results.json)
+            CRITICAL=$(jq '[.Issues[] | select(.severity == "CRITICAL")] | length' gosec-results.json)
+
+            echo "## Resumo por Severidade" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+            echo "| Severidade | Quantidade | Bloqueia? |" >> $REPORT_FILE
+            echo "|:----------:|:----------:|:---------:|" >> $REPORT_FILE
+            echo "| 🔴 CRITICAL | $CRITICAL | ✅ Sim |" >> $REPORT_FILE
+            echo "| 🟠 HIGH | $HIGH | ✅ Sim |" >> $REPORT_FILE
+            echo "| 🟡 MEDIUM | $MEDIUM | ⚠️ Não |" >> $REPORT_FILE
+            echo "| 🟢 LOW | $LOW | ℹ️ Não |" >> $REPORT_FILE
+            echo "| **Total** | **$TOTAL** | — |" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            # Findings ordenados por severidade (CRITICAL → HIGH → MEDIUM → LOW)
+            echo "## Findings Detalhados" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            jq -r '
+              # Ordena: CRITICAL=0, HIGH=1, MEDIUM=2, LOW=3
+              def sev_order:
+                if . == "CRITICAL" then 0
+                elif . == "HIGH"   then 1
+                elif . == "MEDIUM" then 2
+                else 3 end;
+
+              def sev_icon:
+                if . == "CRITICAL" then "🔴"
+                elif . == "HIGH"   then "🟠"
+                elif . == "MEDIUM" then "🟡"
+                else "🟢" end;
+
+              .Issues
+              | sort_by(.severity | sev_order)
+              | .[]
+              | "### \(.severity | sev_icon) [\(.severity)] \(.rule_id) — \(.details)\n" +
+                "- **Arquivo:** \(.file):\(.line)\n" +
+                "- **Severidade:** \(.severity)\n" +
+                "- **Confiança:** \(.confidence)\n" +
+                "- **CWE:** \(.cwe.id // "N/A") — \(.cwe.url // "N/A")\n" +
+                "- **Trecho de código:**\n```go\n\(.code)\n```\n"
+            ' gosec-results.json >> $REPORT_FILE
+          fi
+
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo SAST pipeline._" >> $REPORT_FILE
+
+      # Cria ou atualiza a Issue com os findings do Gosec
+      - name: Create or Update Issue — Gosec (Go)
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-gosec.md
+          update_existing: true
+
+  sast-python:
+    if: inputs.language == 'python'
+    name: SAST Python (${{ inputs.service_path }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./${{ inputs.service_path }}
+    steps:
+      # Clona o código do repositório para acessar os scripts Python
+      - uses: actions/checkout@v4
+
+      # Instala a versão correta do Python no runner com base nos inputs fornecidos
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      # Instala o Bandit, que é um linter voltado para encontrar problemas de segurança em código Python
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      # Executa o Bandit sem filtro de severidade (--severity-level low) para capturar
+      # todos os níveis: LOW, MEDIUM, HIGH.
+      # O --confidence-level low garante que nenhum finding seja silenciado.
+      # Bandit não tem nível CRITICAL nativo — HIGH é o teto.
+      - name: Bandit Analysis
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          bandit \
+            -r . \
+            -f json \
+            -o bandit-results.json \
+            --severity-level low \
+            --confidence-level low \
+            --exclude ./.venv,./tests \
+          || true
+
+          cat bandit-results.json
+
+      # Lê o JSON gerado pelo Bandit e separa os findings por nível de severidade.
+      # Bloqueia o pipeline (exit 1) apenas quando há findings HIGH.
+      # Findings LOW e MEDIUM são reportados no log mas não bloqueiam.
+      - name: Check Critical Findings
+        if: inputs.block_on_critical == true
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+
+          with open("bandit-results.json") as f:
+              data = json.load(f)
+
+          results = data.get("results", [])
+
+          # Agrupa por severidade
+          by_severity = {"LOW": [], "MEDIUM": [], "HIGH": []}
+          for r in results:
+              sev = r.get("issue_severity", "LOW").upper()
+              by_severity.setdefault(sev, []).append(r)
+
+          total  = len(results)
+          low    = len(by_severity.get("LOW",    []))
+          medium = len(by_severity.get("MEDIUM", []))
+          high   = len(by_severity.get("HIGH",   []))
+
+          print("══════════════════════════════════════")
+          print("  bandit — Resumo de findings")
+          print("══════════════════════════════════════")
+          print(f"  LOW    : {low}")
+          print(f"  MEDIUM : {medium}")
+          print(f"  HIGH   : {high}")
+          print(f"  TOTAL  : {total}")
+          print("══════════════════════════════════════")
+
+          # Bandit não tem CRITICAL — HIGH é o nível máximo
+          if high > 0:
+              print(f"\n❌ BLOQUEIO: {high} finding(s) de severidade HIGH detectado(s).")
+              print("   Corrija as vulnerabilidades antes de prosseguir.")
+              sys.exit(1)
+
+          if medium > 0:
+              print(f"\n⚠️  ATENÇÃO: {medium} finding(s) MEDIUM. Revise antes do próximo ciclo.")
+
+          if low > 0:
+              print(f"\nℹ️  INFO: {low} finding(s) LOW registrado(s) para rastreabilidade.")
+
+          print("\n✅ Nenhum finding HIGH. Pipeline liberada.")
+          PYEOF
+
+      # Lê o JSON do Bandit com jq e gera Markdown estruturado para a Issue.
+      # A tabela de resumo no topo já mostra a distribuição por severidade,
+      # e cada finding traz seu nível explicitamente com ícone de cor.
+      - name: Gerar relatório Bandit
+        if: always()
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          REPORT_FILE="../issue-bandit.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[SAST][Python] Bandit — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [security, sast, bandit]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🔍 Bandit — Análise Estática de Segurança (Python)" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          if [ ! -f "bandit-results.json" ] || [ "$(jq '.results | length' bandit-results.json)" -eq 0 ]; then
+            echo "✅ Nenhuma vulnerabilidade encontrada pelo Bandit." >> $REPORT_FILE
+          else
+            # Tabela de resumo por severidade
+            TOTAL=$(jq '.results | length' bandit-results.json)
+            LOW=$(jq '[.results[] | select(.issue_severity == "LOW")] | length' bandit-results.json)
+            MEDIUM=$(jq '[.results[] | select(.issue_severity == "MEDIUM")] | length' bandit-results.json)
+            HIGH=$(jq '[.results[] | select(.issue_severity == "HIGH")] | length' bandit-results.json)
+
+            echo "## Resumo por Severidade" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+            echo "| Severidade | Quantidade | Bloqueia? |" >> $REPORT_FILE
+            echo "|:----------:|:----------:|:---------:|" >> $REPORT_FILE
+            echo "| 🟠 HIGH | $HIGH | ✅ Sim |" >> $REPORT_FILE
+            echo "| 🟡 MEDIUM | $MEDIUM | ⚠️ Não |" >> $REPORT_FILE
+            echo "| 🟢 LOW | $LOW | ℹ️ Não |" >> $REPORT_FILE
+            echo "| **Total** | **$TOTAL** | — |" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            # Findings ordenados por severidade (HIGH → MEDIUM → LOW)
+            echo "## Findings Detalhados" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            jq -r '
+              def sev_order:
+                if . == "HIGH"   then 0
+                elif . == "MEDIUM" then 1
+                else 2 end;
+
+              def sev_icon:
+                if . == "HIGH"   then "🟠"
+                elif . == "MEDIUM" then "🟡"
+                else "🟢" end;
+
+              .results
+              | sort_by(.issue_severity | sev_order)
+              | .[]
+              | "### \(.issue_severity | sev_icon) [\(.issue_severity)] \(.test_id) — \(.test_name)\n" +
+                "- **Arquivo:** \(.filename):\(.line_number)\n" +
+                "- **Severidade:** \(.issue_severity)\n" +
+                "- **Confiança:** \(.issue_confidence)\n" +
+                "- **CWE:** \(.issue_cwe.id // "N/A") — \(.issue_cwe.link // "N/A")\n" +
+                "- **Descrição:** \(.issue_text)\n" +
+                "- **Mais info:** \(.more_info)\n" +
+                "- **Trecho de código:**\n```python\n\(.code)\n```\n"
+            ' bandit-results.json >> $REPORT_FILE
+          fi
+
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo SAST pipeline._" >> $REPORT_FILE
+
+      # Cria ou atualiza a Issue com os findings do Bandit
+      - name: Create or Update Issue — Bandit (Python)
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-bandit.md
+          update_existing: true
+
+  secret-scan:
+    name: Secret Scan (${{ inputs.service_path }})
+    runs-on: ubuntu-latest
+    steps:
+      # Clona os arquivos do projeto para buscar credenciais esquecidas no código
+      - uses: actions/checkout@v4
+
+      # Utiliza o Trivy para varrer todo o sistema de arquivos atrás de senhas, chaves de API e tokens hardcoded.
+      # Trivy classifica secrets como CRITICAL por padrão — o exit-code bloqueia
+      # apenas se block_on_critical=true.
+      - name: Trivy Secret Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: ${{ inputs.service_path }}
+          scanners: 'secret'
+          format: 'json'
+          output: 'trivy-secrets.json'
+          # Trivy secret scan retorna exit 1 sempre que acha algo.
+          # Deixamos exit-code: 0 aqui e controlamos o bloqueio
+          # manualmente no próximo step para poder gerar o relatório
+          # mesmo quando há findings.
+          exit-code: ${{ inputs.block_on_critical && '1' || '0' }}
+
+      # Lê o JSON do Trivy e bloqueia apenas se houver secrets encontrados
+      # (todos os secrets do Trivy são classificados como CRITICAL).
+      - name: Check Secret Findings
+        if: inputs.block_on_critical == true
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+
+          with open("trivy-secrets.json") as f:
+              data = json.load(f)
+
+          secrets = [
+              s
+              for result in data.get("Results", [])
+              for s in result.get("Secrets", []) or []
+          ]
+
+          by_severity = {"CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": [], "UNKNOWN": []}
+          for s in secrets:
+              sev = s.get("Severity", "UNKNOWN").upper()
+              by_severity.setdefault(sev, []).append(s)
+
+          total    = len(secrets)
+          critical = len(by_severity.get("CRITICAL", []))
+          high     = len(by_severity.get("HIGH",     []))
+          medium   = len(by_severity.get("MEDIUM",   []))
+          low      = len(by_severity.get("LOW",      []))
+
+          print("══════════════════════════════════════")
+          print("  Trivy Secret Scan — Resumo")
+          print("══════════════════════════════════════")
+          print(f"  CRITICAL : {critical}")
+          print(f"  HIGH     : {high}")
+          print(f"  MEDIUM   : {medium}")
+          print(f"  LOW      : {low}")
+          print(f"  TOTAL    : {total}")
+          print("══════════════════════════════════════")
+
+          blocking = critical + high
+          if blocking > 0:
+              print(f"\n❌ BLOQUEIO: {blocking} secret(s) CRITICAL/HIGH encontrado(s) no código.")
+              print("   Remova as credenciais e invalide-as na fonte antes de continuar.")
+              sys.exit(1)
+
+          if medium > 0:
+              print(f"\n⚠️  ATENÇÃO: {medium} secret(s) MEDIUM encontrado(s). Avalie e rotacione.")
+
+          if total == 0:
+              print("\n✅ Nenhum secret ou credencial exposta encontrada.")
+          else:
+              print("\n✅ Nenhum secret CRITICAL/HIGH. Pipeline liberada.")
+          PYEOF
+
+      # Lê o JSON de secrets do Trivy com jq e gera Markdown estruturado para a Issue
+      - name: Gerar relatório de Secrets
+        if: always()
+        run: |
+          REPORT_FILE="issue-secrets.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[SAST] Trivy Secrets — Credenciais expostas em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [security, sast, secret-scan]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🔑 Trivy — Secrets e Credenciais Expostas no Código" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          if [ ! -f "trivy-secrets.json" ] || [ "$(jq '[.Results[]?.Secrets[]?] | length' trivy-secrets.json)" -eq 0 ]; then
+            echo "✅ Nenhum secret ou credencial exposta encontrada." >> $REPORT_FILE
+          else
+            # Tabela de resumo por severidade
+            TOTAL=$(jq '[.Results[]?.Secrets[]?] | length' trivy-secrets.json)
+            CRITICAL=$(jq '[.Results[]?.Secrets[]? | select(.Severity == "CRITICAL")] | length' trivy-secrets.json)
+            HIGH=$(jq '[.Results[]?.Secrets[]? | select(.Severity == "HIGH")] | length' trivy-secrets.json)
+            MEDIUM=$(jq '[.Results[]?.Secrets[]? | select(.Severity == "MEDIUM")] | length' trivy-secrets.json)
+            LOW=$(jq '[.Results[]?.Secrets[]? | select(.Severity == "LOW")] | length' trivy-secrets.json)
+
+            echo "## Resumo por Severidade" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+            echo "| Severidade | Quantidade | Bloqueia? |" >> $REPORT_FILE
+            echo "|:----------:|:----------:|:---------:|" >> $REPORT_FILE
+            echo "| 🔴 CRITICAL | $CRITICAL | ✅ Sim |" >> $REPORT_FILE
+            echo "| 🟠 HIGH | $HIGH | ✅ Sim |" >> $REPORT_FILE
+            echo "| 🟡 MEDIUM | $MEDIUM | ⚠️ Não |" >> $REPORT_FILE
+            echo "| 🟢 LOW | $LOW | ℹ️ Não |" >> $REPORT_FILE
+            echo "| **Total** | **$TOTAL** | — |" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            # Findings ordenados por severidade
+            echo "## Secrets Encontrados" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            jq -r '
+              def sev_order:
+                if . == "CRITICAL" then 0
+                elif . == "HIGH"   then 1
+                elif . == "MEDIUM" then 2
+                elif . == "LOW"    then 3
+                else 4 end;
+
+              def sev_icon:
+                if . == "CRITICAL" then "🔴"
+                elif . == "HIGH"   then "🟠"
+                elif . == "MEDIUM" then "🟡"
+                elif . == "LOW"    then "🟢"
+                else "⚪" end;
+
+              .Results[]
+              | select(.Secrets != null)
+              | .Target as $target
+              | .Secrets[]
+              | . as $s
+              | "### \($s.Severity | sev_icon) [\($s.Severity)] \($s.RuleID) — \($s.Title)\n" +
+                "- **Arquivo:** \($target)\n" +
+                "- **Severidade:** \($s.Severity)\n" +
+                "- **Categoria:** \($s.Category)\n" +
+                "- **Linha de início:** \($s.StartLine)\n" +
+                "- **Linha de fim:** \($s.EndLine)\n" +
+                "- **Trecho:** `\($s.Match)`\n"
+            ' trivy-secrets.json >> $REPORT_FILE
+          fi
+
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo SAST pipeline._" >> $REPORT_FILE
+
+      # Cria ou atualiza a Issue com os secrets encontrados pelo Trivy
+      - name: Create or Update Issue — Secrets
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-secrets.md
+          update_existing: true
+          search_existing: all

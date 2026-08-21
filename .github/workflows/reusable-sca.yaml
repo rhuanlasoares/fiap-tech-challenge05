@@ -1,0 +1,368 @@
+name: ♻️ Reusable — SCA
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+      service_path:
+        required: true
+        type: string
+      go_version:
+        required: false
+        type: string
+        default: "1.25"
+      python_version:
+        required: false
+        type: string
+        default: "3.13.13"
+      block_on_critical:
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      TOKEN:
+        required: true
+
+jobs:
+  sca-go:
+    if: inputs.language == 'golang'
+    name: SCA Go (${{ inputs.service_path }})
+    runs-on: ubuntu-latest
+    steps:
+      # Clona o código do repositório para a máquina virtual (runner) para permitir a análise
+      - uses: actions/checkout@v4
+
+      # Configura o ambiente Go instalando a versão especificada e ativando o cache de dependências
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache-dependency-path: ${{ inputs.service_path }}/go.sum
+
+      # Baixa os pacotes listados no go.mod para garantir que o projeto esteja pronto para a análise
+      - name: Download Dependencies
+        working-directory: ${{ inputs.service_path }}
+        run: go mod download
+
+      # Executa o Trivy para varrer os arquivos do projeto em busca de vulnerabilidades (CVEs) em dependências de terceiros, falhando o pipeline se achar algo crítico
+      - name: Trivy Scan (Go)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.service_path }}
+          format: json
+          exit-code: ${{ inputs.block_on_critical && '1' || '0' }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      # Executa o OWASP Dependency Check como uma segunda camada de segurança, utilizando a chave do NVD (se fornecida) para mapear falhas com pontuação CVSS 9 ou maior
+      - name: OWASP Dependency Check (Go)
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ inputs.service_path }}
+          path: ${{ inputs.service_path }}
+          format: 'JSON'
+          out: 'reports'
+          args: >
+            --failOnCVSS 9
+            ${{ secrets.TOKEN != '' && format('--nvdApiKey {0}', secrets.TOKEN) || '' }}
+
+      # Lê o JSON do Trivy com jq e gera um arquivo Markdown estruturado para a Issue
+      - name: Generate Report from Trivy JSON (Go)
+        if: always()
+        run: |
+          TRIVY_FILE="trivy-results.json"
+          REPORT_FILE="issue-trivy.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[SCA][Go] Trivy — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [security, trivy, sca]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🚨 Trivy — Vulnerabilidades Detectadas" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Linguagem:** Go" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          if [ ! -f "$TRIVY_FILE" ] || [ "$(jq '[.Results[]?.Vulnerabilities[]?] | length' $TRIVY_FILE)" -eq 0 ]; then
+            echo "✅ Nenhuma vulnerabilidade encontrada pelo Trivy." >> $REPORT_FILE
+          else
+            count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' $TRIVY_FILE)
+            echo "**Total de vulnerabilidades encontradas:** $count" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            jq -r '
+              .Results[] | select(.Vulnerabilities != null) |
+              .Target as $target |
+              .Vulnerabilities[] |
+              "### 🔸 \(.VulnerabilityID) — \(.PkgName)\n" +
+              "- **Alvo:** \($target)\n" +
+              "- **Severidade:** \(.Severity)\n" +
+              "- **Versão instalada:** \(.InstalledVersion)\n" +
+              "- **Versão corrigida:** \(.FixedVersion // "N/A")\n" +
+              "- **Título:** \(.Title // "N/A")\n" +
+              "- **Descrição:** \(.Description // "Sem descrição.")\n" +
+              "- **Mais info:** \(.PrimaryURL // "N/A")\n"
+            ' $TRIVY_FILE >> $REPORT_FILE
+          fi
+
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo SCA pipeline._" >> $REPORT_FILE
+
+      # Lê o JSON do OWASP com jq e gera um arquivo Markdown estruturado para a Issue
+      - name: Generate Report from OWASP JSON (Go)
+        if: always()
+        run: |
+          OWASP_FILE="reports/dependency-check-report.json"
+          REPORT_FILE="issue-owasp.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[SCA][Go] OWASP — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [security, owasp, sca]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🚨 OWASP Dependency Check — Vulnerabilidades Detectadas" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Linguagem:** Go" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          if [ ! -f "$OWASP_FILE" ] || [ "$(jq '[.dependencies[]?.vulnerabilities[]?] | length' $OWASP_FILE)" -eq 0 ]; then
+            echo "✅ Nenhuma vulnerabilidade encontrada pelo OWASP Dependency Check." >> $REPORT_FILE
+          else
+            count=$(jq '[.dependencies[]?.vulnerabilities[]?] | length' $OWASP_FILE)
+            echo "**Total de vulnerabilidades encontradas:** $count" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            jq -r '
+              .dependencies[] | select(.vulnerabilities != null) |
+              .fileName as $pkg |
+              .vulnerabilities[] |
+              "### 🔸 \(.name) — \($pkg)\n" +
+              "- **Severidade:** \(.severity)\n" +
+              "- **CVSS v3:** \(.cvssv3.baseScore // "N/A")\n" +
+              "- **CVSS v2:** \(.cvssv2.score // "N/A")\n" +
+              "- **Descrição:** \(.description // "Sem descrição.")\n" +
+              "- **Mais info:** \(.references[0].url // "N/A")\n"
+            ' $OWASP_FILE >> $REPORT_FILE
+          fi
+
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo SCA pipeline._" >> $REPORT_FILE
+
+      # Cria ou atualiza a Issue do Trivy usando o arquivo Markdown gerado
+      # O título padronizado garante que issues duplicadas não sejam abertas
+      - name: Create issue for image scan report
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-trivy.md
+          update_existing: true
+          search_existing: all
+
+      # - name: Create or Update Issue — Trivy (Go)
+      #   if: always()
+      #   uses: peter-evans/create-issue-from-file@v5
+      #   with:
+      #     title: '[SCA][Go] Trivy — Vulnerabilidades em ${{ inputs.service_path }}'
+      #     content-filepath: issue-trivy.md
+      #     labels: security, trivy, sca
+      #     token: ${{ secrets.TOKEN }}
+
+      # Cria ou atualiza a Issue do OWASP usando o arquivo Markdown gerado
+      - name: Create issue for image scan report
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-owasp.md
+          update_existing: true
+          search_existing: all
+      # - name: Create or Update Issue — OWASP (Go)
+      #   if: always()
+      #   uses: peter-evans/create-issue-from-file@v5
+      #   with:
+      #     title: '[SCA][Go] OWASP — Vulnerabilidades em ${{ inputs.service_path }}'
+      #     content-filepath: issue-owasp.md
+      #     labels: security, owasp, sca
+      #     token: ${{ secrets.TOKEN }}
+
+  sca-python:
+    if: inputs.language == 'python'
+    name: SCA Python (${{ inputs.service_path }})
+    runs-on: ubuntu-latest
+    steps:
+      # Clona o repositório para o runner, garantindo acesso aos arquivos Python e listas de dependências
+      - uses: actions/checkout@v4
+
+      # Prepara o ambiente instalando a versão correta do Python conforme os parâmetros do workflow
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      # Atualiza o pip e instala as dependências listadas no requirements.txt, preparando o terreno para a varredura
+      - name: Install Dependencies
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Roda o Trivy no diretório do projeto para encontrar pacotes Python vulneráveis, aplicando a regra de bloqueio se configurado
+      - name: Trivy Scan (Python)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.service_path }}
+          format: json
+          exit-code: ${{ inputs.block_on_critical && '1' || '0' }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      # Utiliza o OWASP Dependency Check para uma validação profunda das bibliotecas, cruzando os dados com a base de vulnerabilidades do governo americano (NVD)
+      - name: OWASP Dependency Check (Python)
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ inputs.service_path }}
+          path: ${{ inputs.service_path }}
+          format: 'JSON'
+          out: 'reports'
+          args: >
+            --failOnCVSS 9
+            ${{ secrets.TOKEN != '' && format('--nvdApiKey {0}', secrets.TOKEN) || '' }}
+
+      # Lê o JSON do Trivy com jq e gera um arquivo Markdown estruturado para a Issue
+      - name: Generate Report from Trivy JSON (Python)
+        if: always()
+        run: |
+          TRIVY_FILE="trivy-results.json"
+          REPORT_FILE="issue-trivy.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[SCA][Python] Trivy — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [security, trivy, sca]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🚨 Trivy — Vulnerabilidades Detectadas" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Linguagem:** Python" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          if [ ! -f "$TRIVY_FILE" ] || [ "$(jq '[.Results[]?.Vulnerabilities[]?] | length' $TRIVY_FILE)" -eq 0 ]; then
+            echo "✅ Nenhuma vulnerabilidade encontrada pelo Trivy." >> $REPORT_FILE
+          else
+            count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' $TRIVY_FILE)
+            echo "**Total de vulnerabilidades encontradas:** $count" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            jq -r '
+              .Results[] | select(.Vulnerabilities != null) |
+              .Target as $target |
+              .Vulnerabilities[] |
+              "### 🔸 \(.VulnerabilityID) — \(.PkgName)\n" +
+              "- **Alvo:** \($target)\n" +
+              "- **Severidade:** \(.Severity)\n" +
+              "- **Versão instalada:** \(.InstalledVersion)\n" +
+              "- **Versão corrigida:** \(.FixedVersion // "N/A")\n" +
+              "- **Título:** \(.Title // "N/A")\n" +
+              "- **Descrição:** \(.Description // "Sem descrição.")\n" +
+              "- **Mais info:** \(.PrimaryURL // "N/A")\n"
+            ' $TRIVY_FILE >> $REPORT_FILE
+          fi
+
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo SCA pipeline._" >> $REPORT_FILE
+
+      # Lê o JSON do OWASP com jq e gera um arquivo Markdown estruturado para a Issue
+      - name: Generate Report from OWASP JSON (Python)
+        if: always()
+        run: |
+          OWASP_FILE="reports/dependency-check-report.json"
+          REPORT_FILE="issue-owasp.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[SCA][Python] OWASP — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [security, owasp, sca]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🚨 OWASP Dependency Check — Vulnerabilidades Detectadas" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Linguagem:** Python" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          if [ ! -f "$OWASP_FILE" ] || [ "$(jq '[.dependencies[]?.vulnerabilities[]?] | length' $OWASP_FILE)" -eq 0 ]; then
+            echo "✅ Nenhuma vulnerabilidade encontrada pelo OWASP Dependency Check." >> $REPORT_FILE
+          else
+            count=$(jq '[.dependencies[]?.vulnerabilities[]?] | length' $OWASP_FILE)
+            echo "**Total de vulnerabilidades encontradas:** $count" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+
+            jq -r '
+              .dependencies[] | select(.vulnerabilities != null) |
+              .fileName as $pkg |
+              .vulnerabilities[] |
+              "### 🔸 \(.name) — \($pkg)\n" +
+              "- **Severidade:** \(.severity)\n" +
+              "- **CVSS v3:** \(.cvssv3.baseScore // "N/A")\n" +
+              "- **CVSS v2:** \(.cvssv2.score // "N/A")\n" +
+              "- **Descrição:** \(.description // "Sem descrição.")\n" +
+              "- **Mais info:** \(.references[0].url // "N/A")\n"
+            ' $OWASP_FILE >> $REPORT_FILE
+          fi
+
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo SCA pipeline._" >> $REPORT_FILE
+
+      # Cria ou atualiza a Issue do Trivy usando o arquivo Markdown gerado
+      - name: Create or Update Issue — Trivy (Python)
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-trivy.md
+          update_existing: true
+          search_existing: all
+      # - name: Create or Update Issue — Trivy (Python)
+      #   if: always()
+      #   uses: peter-evans/create-issue-from-file@v5
+      #   with:
+      #     title: '[SCA][Python] Trivy — Vulnerabilidades em ${{ inputs.service_path }}'
+      #     content-filepath: issue-trivy.md
+      #     labels: security, trivy, sca
+      #     token: ${{ secrets.TOKEN }}
+
+      # Cria ou atualiza a Issue do OWASP usando o arquivo Markdown gerado
+      - name: Create or Update Issue — OWASP (Python)
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-owasp.md
+          update_existing: true
+          search_existing: all
+      # - name: Create or Update Issue — OWASP (Python)
+      #   if: always()
+      #   uses: peter-evans/create-issue-from-file@v5
+      #   with:
+      #     title: '[SCA][Python] OWASP — Vulnerabilidades em ${{ inputs.service_path }}'
+      #     content-filepath: issue-owasp.md
+      #     labels: security, owasp, sca
+      #     token: ${{ secrets.TOKEN }}

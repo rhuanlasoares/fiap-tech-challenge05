@@ -1,0 +1,50 @@
+﻿---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    namespace: "argo-rollouts"
+  tasks:
+    - name: Add Argo Helm repository
+      ansible.builtin.command: "helm repo add argo https://argoproj.github.io/argo-helm"
+      register: output1
+      ignore_errors: yes
+
+    - name: Verify output1
+      debug:
+        var: output1.stdout_lines
+      ignore_errors: yes
+
+    - name: Helm repo update
+      ansible.builtin.command: "helm repo update"
+      register: output2
+      ignore_errors: yes
+
+    - name: Verify output2
+      debug:
+        var: output2.stdout_lines
+      ignore_errors: yes
+
+    - name: Install or Upgrade Argo Rollouts Controller and CRDs
+      ansible.builtin.command: >
+        helm upgrade --install argo-rollouts argo/argo-rollouts 
+        -n {{ namespace }} 
+      register: output3
+      ignore_errors: yes
+
+    - name: Verify output3
+      debug:
+        var: output3.stdout_lines
+      ignore_errors: yes
+
+    - name: Wait for Argo Rollouts controller to be ready
+      ansible.builtin.command: >
+        kubectl wait --for=condition=available deployment/argo-rollouts 
+        -n {{ namespace }} 
+        --timeout=120s
+      register: output4
+      ignore_errors: yes
+
+    - name: Verify output4
+      debug:
+        var: output4.stdout_lines
+      ignore_errors: yes

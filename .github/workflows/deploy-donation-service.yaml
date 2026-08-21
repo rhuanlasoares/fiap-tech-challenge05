@@ -1,0 +1,90 @@
+﻿name: 🔐 Pipeline — donation-service (Golang)
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/donation-service/**"]
+  pull_request:
+    branches: [main]
+    paths: ["apps/donation-service/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+  security-events: write
+
+env:
+  SERVICE: donation-service
+  LANGUAGE: golang
+  GO_VERSION: "1.25"
+  SERVICE_PATH: apps/donation-service
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  lint:
+    name: 🔍 Lint
+    uses: ./.github/workflows/reusable-lint.yaml
+    with:
+      language: golang
+      service_path: apps/donation-service
+      go_version: "1.25"
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sca:
+    name: 📦 SCA
+    needs: lint
+    uses: ./.github/workflows/reusable-sca.yaml
+    with:
+      language: golang
+      service_path: apps/donation-service
+      block_on_critical: true
+      go_version: "1.25"
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: 🔒 SAST
+    needs: lint
+    uses: ./.github/workflows/reusable-sast.yaml
+    with:
+      language: golang
+      service_path: apps/donation-service
+      block_on_critical: true
+      go_version: "1.25"
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container-scan:
+    name: 🐳 Container Scan & Local Build
+    needs: [sca, sast]
+    uses: ./.github/workflows/reusable-container-scan.yaml
+    with:
+      service_path: apps/donation-service
+      image_name: donation-service
+      image_tag: ${{ github.sha }}
+      block_on_critical: true
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-push-gitops:
+    name: 🚀 Build, Push and Update GitOps Manifests
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    needs: container-scan
+    uses: ./.github/workflows/build-push-gitops.yaml
+    with:
+      imageName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-donation-sa/donation-service
+      imageTag: ${{ github.sha }}
+      nameService: donation-service
+      region: southamerica-east1
+      service_path: apps/donation-service
+    secrets:
+      PROJECT_ID: ces-igniteprogram
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}

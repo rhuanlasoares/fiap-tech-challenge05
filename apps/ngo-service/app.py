@@ -1,10 +1,17 @@
-import os
+﻿import os
 import sys
+import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 from flask import Flask, request, jsonify
-import logging
+
+# Inicialização do New Relic Agent com suporte a AI Monitoring (AIM)
+try:
+    import newrelic.agent
+    newrelic.agent.initialize()
+except Exception as nr_err:
+    logging.getLogger(__name__).warning(f"New Relic initialization skipped or failed: {nr_err}")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)

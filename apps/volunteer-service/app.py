@@ -1,10 +1,17 @@
-import os
+﻿import os
 import sys
 import uuid
 import time
 import logging
 import boto3
 from flask import Flask, request, jsonify
+
+# Inicialização do New Relic Agent com suporte a AI Monitoring (AIM)
+try:
+    import newrelic.agent
+    newrelic.agent.initialize()
+except Exception as nr_err:
+    logging.getLogger(__name__).warning(f"New Relic initialization skipped or failed: {nr_err}")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
@@ -19,7 +26,11 @@ if not DYNAMODB_TABLE:
     sys.exit(1)
 
 try:
-    dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
+    if endpoint_url:
+        dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION, endpoint_url=endpoint_url)
+    else:
+        dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(DYNAMODB_TABLE)
     log.info(f"Conectado à tabela DynamoDB: {DYNAMODB_TABLE}")
 except Exception as e:

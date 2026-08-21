@@ -1,4 +1,4 @@
-FROM python:3.14.7-alpine3.24 AS builder
+﻿FROM python:3.14.7-alpine3.24 AS builder
 
 WORKDIR /app
 
@@ -28,4 +28,4 @@ EXPOSE 8083
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8083/health')" || exit 1
 
-CMD ["opentelemetry-instrument", "gunicorn", "--bind", "0.0.0.0:8083", "app:app"]
+CMD ["newrelic-admin", "run-program", "opentelemetry-instrument", "gunicorn", "--bind", "0.0.0.0:8083", "app:app"]

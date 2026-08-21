@@ -50,7 +50,9 @@ variable "secrets" {
   }))
 }
 
-variable "bucket_name" {
-  type        = string
-  description = "Bucket for Loki"
+variable "buckets" {
+  type = map(object({
+    bucket_name     = string
+    labels_bucket = map(string)
+  }))
 }

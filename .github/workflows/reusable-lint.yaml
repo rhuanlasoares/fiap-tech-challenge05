@@ -1,0 +1,293 @@
+name: ♻️ Reusable — Lint
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+      service_path:
+        required: true
+        type: string
+      go_version:
+        required: false
+        type: string
+        default: "1.25"
+      python_version:
+        required: false
+        type: string
+        default: "3.13.13"
+    secrets:
+      TOKEN:
+        required: true
+
+jobs:
+  lint-go:
+    if: inputs.language == 'golang'
+    name: Lint Go (${{ inputs.service_path }})
+    runs-on: ubuntu-latest
+    steps:
+      # Clona o código do repositório para o runner, permitindo modificações com o token fornecido
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TOKEN }}
+
+      # Prepara o ambiente Go instalando a versão especificada nos inputs
+      - name: Setup Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version: ${{ inputs.go_version }}
+
+      # Baixa as dependências do projeto Go baseadas no arquivo go.mod
+      - name: Download Dependencies
+        working-directory: ${{ inputs.service_path }}
+        run: go mod download
+
+      # Formata o código Go automaticamente para o padrão oficial
+      - name: Fix formatting
+        working-directory: ${{ inputs.service_path }}
+        run: gofmt -w .
+
+      # Executa a suíte de lint do Go e tenta corrigir automaticamente problemas menores (--fix)
+      - name: Run GolangCI-Lint (auto-fix where possible)
+        uses: golangci/golangci-lint-action@v9.2.0
+        with:
+          working-directory: ${{ inputs.service_path }}
+          args: --fix
+      
+      # Captura o diff gerado pelas correções automáticas antes do commit
+      - name: Capturar diff das correções
+        if: always()
+        id: diff
+        run: |
+          git diff --unified=3 ${{ inputs.service_path }} > lint-diff.txt || true
+          echo "has_diff=$([ -s lint-diff.txt ] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT  
+      
+      # Verifica se houve alterações, faz o commit das correções e envia (push) para a branch main
+      - name: 💾 Commit and push changes
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+          git pull
+          git add ${{ inputs.service_path }}/*
+          
+          if git diff --staged --quiet; then
+            echo "⚠️ No changes to commit"
+          else
+            git commit -m "Code linted and formatted by GitHub Actions"
+            git push origin main
+            echo "✅ Changes pushed to repository"
+          fi
+        
+          git status
+
+      # Gera o Markdown da Issue com o resumo das correções e erros residuais do GolangCI
+      - name: Gerar relatório de Lint (Go)
+        if: always()
+        run: |
+          REPORT_FILE="issue-lint-go.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[Lint][Go] Correções automáticas em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [lint, go, code-quality]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🧹 Lint — Correções Automáticas (Go)" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> $REPORT_FILE
+          echo "**Commit:** \`${{ github.sha }}\`" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          echo "## 📝 Arquivos corrigidos automaticamente" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          if [ "${{ steps.diff.outputs.has_diff }}" = "true" ]; then
+            echo "As seguintes alterações foram aplicadas pelo \`gofmt\` e \`golangci-lint --fix\` e commitadas automaticamente:" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+            echo "\`\`\`diff" >> $REPORT_FILE
+            cat lint-diff.txt >> $REPORT_FILE
+            echo "\`\`\`" >> $REPORT_FILE
+          else
+            echo "✅ Nenhuma correção automática necessária. O código já estava formatado." >> $REPORT_FILE
+          fi
+
+          echo "" >> $REPORT_FILE
+          echo "## ⚠️ Erros residuais (não corrigíveis automaticamente)" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          if [ -f golangci-lint-output.txt ] && [ -s golangci-lint-output.txt ]; then
+            echo "\`\`\`" >> $REPORT_FILE
+            cat golangci-lint-output.txt >> $REPORT_FILE
+            echo "\`\`\`" >> $REPORT_FILE
+          else
+            echo "✅ Nenhum erro residual encontrado." >> $REPORT_FILE
+          fi
+
+          echo "" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo Lint pipeline._" >> $REPORT_FILE
+          
+      - name: Create or Update Issue — Lint (Go)
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-lint-go.md
+          update_existing: true
+          search_existing: all
+
+      # Cria ou atualiza a Issue com o resumo das correções de lint do Go
+      # - name: Create or Update Issue — Lint (Go)
+      #   if: always()
+      #   uses: peter-evans/create-issue-from-file@v5
+      #   with:
+      #     title: '[Lint][Go] Correções automáticas em ${{ inputs.service_path }}'
+      #     content-filepath: issue-lint-go.md
+      #     labels: lint, go, code-quality
+      #     token: ${{ secrets.TOKEN }}
+          
+  lint-python:
+    if: inputs.language == 'python'
+    name: Fix Python (${{ inputs.service_path }})
+    runs-on: ubuntu-latest
+    steps:
+      # Clona o código do repositório garantindo acesso para futuros commits
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TOKEN }}
+
+      # Prepara o ambiente Python instalando a versão especificada nos inputs
+      - name: Setup Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      # Atualiza o pip, instala as ferramentas de lint/formatação e as dependências do projeto
+      - name: Install Tools
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          pip install --upgrade pip
+          pip install black isort flake8 pylint
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Aplica o formatador de código Black e ordena as importações automaticamente com o isort
+      - name: Auto format (black + isort)
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          black .
+          isort .
+
+      # Executa a validação de estilo e qualidade, ignorando erros que travariam o pipeline (|| true)
+      - name: Lint validation (opcional)
+        working-directory: ${{ inputs.service_path }}
+        run: |
+          flake8 . --max-line-length=120 || true
+          pylint **/*.py || true
+      
+      # Captura o diff gerado pelas correções automáticas antes do commit
+      - name: Capturar diff das correções
+        if: always()
+        id: diff
+        run: |
+          git diff --unified=3 ${{ inputs.service_path }} > lint-diff.txt || true
+          echo "has_diff=$([ -s lint-diff.txt ] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT  
+      
+      # Confere se os formatadores alteraram arquivos, cria o commit automatizado e faz o push
+      - name: 💾 Commit and push changes
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          git pull
+          git add ${{ inputs.service_path }}/*
+          
+          if git diff --staged --quiet; then
+            echo "⚠️ No changes to commit"
+          else
+            git commit -m "Code linted and formatted by GitHub Actions"
+            git push origin main
+            echo "✅ Changes pushed to repository"
+          fi
+        
+          git status
+
+      # Gera o Markdown da Issue com diff das correções e erros residuais do flake8 e pylint
+      - name: Gerar relatório de Lint (Python)
+        if: always()
+        run: |
+          REPORT_FILE="issue-lint-python.md"
+
+          echo "---" > $REPORT_FILE
+          echo "title: '[Lint][Python] Correções automáticas em ${{ inputs.service_path }}'" >> $REPORT_FILE
+          echo "labels: [lint, python, code-quality]" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "# 🧹 Lint — Correções Automáticas (Python)" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> $REPORT_FILE
+          echo "**Commit:** \`${{ github.sha }}\`" >> $REPORT_FILE
+          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
+          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+
+          echo "## 📝 Arquivos corrigidos automaticamente" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          if [ "${{ steps.diff.outputs.has_diff }}" = "true" ]; then
+            echo "As seguintes alterações foram aplicadas pelo \`black\` e \`isort\` e commitadas automaticamente:" >> $REPORT_FILE
+            echo "" >> $REPORT_FILE
+            echo "\`\`\`diff" >> $REPORT_FILE
+            cat lint-diff.txt >> $REPORT_FILE
+            echo "\`\`\`" >> $REPORT_FILE
+          else
+            echo "✅ Nenhuma correção automática necessária. O código já estava formatado." >> $REPORT_FILE
+          fi
+
+          echo "" >> $REPORT_FILE
+          echo "## ⚠️ Erros residuais — Flake8" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          if [ -f flake8-output.txt ] && [ -s flake8-output.txt ]; then
+            echo "\`\`\`" >> $REPORT_FILE
+            cat flake8-output.txt >> $REPORT_FILE
+            echo "\`\`\`" >> $REPORT_FILE
+          else
+            echo "✅ Nenhum erro encontrado pelo Flake8." >> $REPORT_FILE
+          fi
+
+          echo "" >> $REPORT_FILE
+          echo "## ⚠️ Erros residuais — Pylint" >> $REPORT_FILE
+          echo "" >> $REPORT_FILE
+          if [ -f pylint-output.txt ] && [ -s pylint-output.txt ]; then
+            echo "\`\`\`" >> $REPORT_FILE
+            cat pylint-output.txt >> $REPORT_FILE
+            echo "\`\`\`" >> $REPORT_FILE
+          else
+            echo "✅ Nenhum erro encontrado pelo Pylint." >> $REPORT_FILE
+          fi
+
+          echo "" >> $REPORT_FILE
+          echo "---" >> $REPORT_FILE
+          echo "_Relatório gerado automaticamente pelo Lint pipeline._" >> $REPORT_FILE
+
+      # Cria ou atualiza a Issue com o resumo das correções de lint do Python
+      - name: Create or Update Issue — Lint (Python)
+        timeout-minutes: 5
+        uses: JasonEtco/create-an-issue@v2.9.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          filename: issue-lint-python.md
+          update_existing: true
+          search_existing: all
+
+      # - name: Create or Update Issue — Lint (Python)
+      #   if: always()
+      #   uses: peter-evans/create-issue-from-file@v5
+      #   with:
+      #     title: '[Lint][Python] Correções automáticas em ${{ inputs.service_path }}'
+      #     content-filepath: issue-lint-python.md
+      #     labels: lint, python, code-quality
+      #     token: ${{ secrets.TOKEN }}

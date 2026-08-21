@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/joho/godotenv"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -32,6 +33,7 @@ type App struct {
 	DB          *sql.DB
 	SqsSvc      *sqs.SQS
 	SqsQueueURL string
+	NrApp       *newrelic.Application
 }
 
 func main() {
@@ -49,6 +51,35 @@ func main() {
 				log.Printf("Erro ao finalizar OpenTelemetry: %v", err)
 			}
 		}()
+	}
+
+	// Inicialização do New Relic com suporte a AI Monitoring (AIM)
+	var nrApp *newrelic.Application
+	licenseKey := os.Getenv("NEW_RELIC_LICENSE_KEY")
+	appName := os.Getenv("NEW_RELIC_APP_NAME")
+	if appName == "" {
+		appName = "donation-service"
+	}
+
+	if licenseKey != "" {
+		var nrErr error
+		nrApp, nrErr = newrelic.NewApplication(
+			newrelic.ConfigAppName(appName),
+			newrelic.ConfigLicense(licenseKey),
+			newrelic.ConfigAIMonitoringEnabled(true),
+			newrelic.ConfigAIMonitoringRecordContentEnabled(true),
+			newrelic.ConfigAIMonitoringStreamingEnabled(true),
+			newrelic.ConfigAppLogForwardingEnabled(true),
+			newrelic.ConfigDistributedTracerEnabled(true),
+		)
+		if nrErr != nil {
+			log.Printf("[WARN] Falha ao inicializar New Relic: %v", nrErr)
+		} else {
+			LogInfo(ctx, "New Relic Application inicializado com suporte a AI Monitoring.")
+			defer nrApp.Shutdown(5 * time.Second)
+		}
+	} else {
+		log.Println("[INFO] NEW_RELIC_LICENSE_KEY não informada. Executando sem New Relic.")
 	}
 
 	port := os.Getenv("PORT")
@@ -85,18 +116,37 @@ func main() {
 	queueURL := os.Getenv("AWS_SQS_URL")
 	region := os.Getenv("AWS_REGION")
 	if queueURL != "" && region != "" {
-		sess, _ := session.NewSession(&aws.Config{Region: aws.String(region)})
+		awsCfg := &aws.Config{Region: aws.String(region)}
+		if ep := os.Getenv("AWS_ENDPOINT_URL"); ep != "" {
+			awsCfg.Endpoint = aws.String(ep)
+		}
+		sess, _ := session.NewSession(awsCfg)
 		sqsSvc = sqs.New(sess)
 		LogInfo(ctx, "Integração com AWS SQS ativada.")
 	}
 
-	app := &App{DB: db, SqsSvc: sqsSvc, SqsQueueURL: queueURL}
+	app := &App{
+		DB:          db,
+		SqsSvc:      sqsSvc,
+		SqsQueueURL: queueURL,
+		NrApp:       nrApp,
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", app.HealthHandler)
-	mux.HandleFunc("/donation-service/health", app.HealthHandler)
-	mux.HandleFunc("/donations", app.DonationHandler)
-	mux.HandleFunc("/donation-service/donations", app.DonationHandler)
+
+	// Registro de rotas com instrumentação do New Relic
+	registerRoute := func(pattern string, handlerFunc http.HandlerFunc) {
+		if nrApp != nil {
+			mux.HandleFunc(newrelic.WrapHandleFunc(nrApp, pattern, handlerFunc))
+		} else {
+			mux.HandleFunc(pattern, handlerFunc)
+		}
+	}
+
+	registerRoute("/health", app.HealthHandler)
+	registerRoute("/donation-service/health", app.HealthHandler)
+	registerRoute("/donations", app.DonationHandler)
+	registerRoute("/donation-service/donations", app.DonationHandler)
 
 	handler := HTTPMiddleware(mux)
 
@@ -113,16 +163,26 @@ func (a *App) HealthHandler(w http.ResponseWriter, r *http.Request) {
 func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	ctx := r.Context()
+	txn := newrelic.FromContext(ctx)
 
 	if r.Method == http.MethodPost {
 		var d Donation
 		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+			if txn != nil {
+				txn.NoticeError(err)
+			}
 			RecordError(ctx, err, "invalid_payload", "Payload de doação inválido")
 			http.Error(w, `{"error":"Payload inválido"}`, http.StatusBadRequest)
 			return
 		}
 
 		d.Status = "APPROVED" // Simulação de gateway de pagamento
+
+		if txn != nil {
+			txn.AddAttribute("donation.ngo_id", d.NgoID)
+			txn.AddAttribute("donation.amount", d.Amount)
+			txn.AddAttribute("donation.donor_name", d.DonorName)
+		}
 
 		dbCtx, span := Tracer().Start(ctx, "db.insert_donation",
 			oteltrace.WithSpanKind(oteltrace.SpanKindClient),
@@ -133,17 +193,40 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 				attribute.Float64("amount", d.Amount),
 			),
 		)
+
+		var dbSegment *newrelic.DatastoreSegment
+		if txn != nil {
+			dbSegment = &newrelic.DatastoreSegment{
+				StartTime:          txn.StartSegmentNow(),
+				Product:            newrelic.DatastorePostgres,
+				Collection:         "donations",
+				Operation:          "INSERT",
+				ParameterizedQuery: "INSERT INTO donations (ngo_id, amount, donor_name, status) VALUES ($1, $2, $3, $4) RETURNING id, created_at",
+			}
+		}
+
 		err := a.DB.QueryRowContext(
 			dbCtx,
 			"INSERT INTO donations (ngo_id, amount, donor_name, status) VALUES ($1, $2, $3, $4) RETURNING id, created_at",
 			d.NgoID, d.Amount, d.DonorName, d.Status,
 		).Scan(&d.ID, &d.CreatedAt)
+
+		if dbSegment != nil {
+			dbSegment.End()
+		}
 		span.End()
 
 		if err != nil {
+			if txn != nil {
+				txn.NoticeError(err)
+			}
 			RecordError(ctx, err, "db_insert_error", "Erro ao salvar doação no PostgreSQL")
 			http.Error(w, `{"error":"Erro interno"}`, http.StatusInternalServerError)
 			return
+		}
+
+		if txn != nil {
+			txn.AddAttribute("donation.id", d.ID)
 		}
 
 		if donationsCreated != nil {
@@ -176,10 +259,29 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 				attribute.String("db.statement", "SELECT FROM donations"),
 			),
 		)
+
+		var dbSegment *newrelic.DatastoreSegment
+		if txn != nil {
+			dbSegment = &newrelic.DatastoreSegment{
+				StartTime:          txn.StartSegmentNow(),
+				Product:            newrelic.DatastorePostgres,
+				Collection:         "donations",
+				Operation:          "SELECT",
+				ParameterizedQuery: "SELECT id, ngo_id, amount, donor_name, status, created_at FROM donations ORDER BY id DESC",
+			}
+		}
+
 		rows, err := a.DB.QueryContext(dbCtx, "SELECT id, ngo_id, amount, donor_name, status, created_at FROM donations ORDER BY id DESC")
+
+		if dbSegment != nil {
+			dbSegment.End()
+		}
 		span.End()
 
 		if err != nil {
+			if txn != nil {
+				txn.NoticeError(err)
+			}
 			RecordError(ctx, err, "db_query_error", "Erro ao buscar doações no PostgreSQL")
 			http.Error(w, `{"error":"Erro interno"}`, http.StatusInternalServerError)
 			return
@@ -190,6 +292,9 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var d Donation
 			if err := rows.Scan(&d.ID, &d.NgoID, &d.Amount, &d.DonorName, &d.Status, &d.CreatedAt); err != nil {
+				if txn != nil {
+					txn.NoticeError(err)
+				}
 				RecordError(ctx, err, "db_scan_error", "Erro ao ler registro de doação")
 				http.Error(w, `{"error":"Erro interno"}`, http.StatusInternalServerError)
 				return
@@ -206,6 +311,8 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) sendNotificationEvent(ctx context.Context, d Donation) {
+	txn := newrelic.FromContext(ctx)
+
 	sqsCtx, span := Tracer().Start(ctx, "sqs.send_message",
 		oteltrace.WithSpanKind(oteltrace.SpanKindProducer),
 		oteltrace.WithAttributes(
@@ -216,8 +323,21 @@ func (a *App) sendNotificationEvent(ctx context.Context, d Donation) {
 	)
 	defer span.End()
 
+	var msgSegment *newrelic.MessageProducerSegment
+	if txn != nil {
+		msgSegment = &newrelic.MessageProducerSegment{
+			StartTime:            txn.StartSegmentNow(),
+			DestinationType:      newrelic.MessageQueue,
+			DestinationName:      a.SqsQueueURL,
+			DestinationTemporary: false,
+		}
+	}
+
 	body, err := json.Marshal(d)
 	if err != nil {
+		if txn != nil {
+			txn.NoticeError(err)
+		}
 		RecordError(sqsCtx, err, "sqs_marshal_error", "Falha ao serializar doação para SQS")
 		return
 	}
@@ -226,7 +346,15 @@ func (a *App) sendNotificationEvent(ctx context.Context, d Donation) {
 		MessageBody: aws.String(string(body)),
 		QueueUrl:    aws.String(a.SqsQueueURL),
 	})
+
+	if msgSegment != nil {
+		msgSegment.End()
+	}
+
 	if err != nil {
+		if txn != nil {
+			txn.NoticeError(err)
+		}
 		RecordError(sqsCtx, err, "sqs_send_error", "Falha ao despachar evento SQS")
 	} else {
 		span.SetStatus(codes.Ok, "Mensagem enviada com sucesso ao SQS")

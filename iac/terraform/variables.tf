@@ -25,14 +25,11 @@ variable "services_apis_list" {
 }
 
 ### Bucket
-variable "bucket_name" {
-  type        = string
-  description = "Bucket for Loki"
-}
-
-variable "labels_bucket" {
-  type        = map(string)
-  description = "Labels for bucket."
+variable "buckets" {
+  type = map(object({
+    bucket_name     = string
+    labels_bucket = map(string)
+  }))
 }
 
 ### Service Account Module Variables

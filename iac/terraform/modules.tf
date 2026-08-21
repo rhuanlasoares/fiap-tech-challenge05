@@ -18,11 +18,12 @@ locals {
 
 module "cloud_storage" {
   source = "./modules/bucket"
+  for_each = var.buckets
 
   project_id    = var.project_id
   region        = var.region
-  bucket_name   = var.bucket_name
-  labels_bucket = var.labels_bucket
+  bucket_name   = each.value.bucket_name
+  labels_bucket = each.value.labels_bucket
 }
 
 module "wifederation" {
@@ -101,7 +102,7 @@ module "iam" {
   artreg         = var.artreg
   sa_inside_gke  = var.sa_inside_gke
   sa_gke_name    = module.service_accounts.sa_name["sa-gke-fiap"]
-  bucket_name    = var.bucket_name
+  buckets = var.buckets
   secrets = {
     aws_access_key_id     = var.aws_access_key_id
     aws_secret_access_key = var.aws_secret_access_key

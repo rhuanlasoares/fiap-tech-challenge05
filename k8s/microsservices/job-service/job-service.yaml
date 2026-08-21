@@ -51,18 +51,21 @@ spec:
                 --from-literal=AWS_ACCESS_KEY_ID="$AWS_KEY_ID" \
                 --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET" \
                 --from-literal=AWS_SESSION_TOKEN="$AWS_TOKEN" \
-                --from-literal=AWS_SQS_QUEUE_URL="$SQS_URL"
+                --from-literal=AWS_SQS_QUEUE_URL="$SQS_URL" \
+                --from-literal=NEW_RELIC_APIKEY="$NEW_RELIC_APIKEY"
               echo "🔐 Donation Secrets criados com sucesso!"
 
               kubectl create secret generic ngo-secrets-job -n ngo-ns \
                 --from-literal=DB_PASSWORD="$NGO_DB_SECRET_MANAGER" \
-                --from-literal=DATABASE_URL="postgres://$DB_USER:$NGO_DB_SECRET_MANAGER@127.0.0.1:$DB_PORT/$DB_NGO_NAME?sslmode=disable"
+                --from-literal=DATABASE_URL="postgres://$DB_USER:$NGO_DB_SECRET_MANAGER@127.0.0.1:$DB_PORT/$DB_NGO_NAME?sslmode=disable" \
+                --from-literal=NEW_RELIC_APIKEY="$NEW_RELIC_APIKEY"
               echo "🔐 NGO Secrets criados com sucesso!"
 
               kubectl create secret generic volunteer-secrets-job -n volunteer-ns \
                 --from-literal=AWS_ACCESS_KEY_ID="$AWS_KEY_ID" \
                 --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET" \
-                --from-literal=AWS_SESSION_TOKEN="$AWS_TOKEN"
+                --from-literal=AWS_SESSION_TOKEN="$AWS_TOKEN" \
+                --from-literal=NEW_RELIC_APIKEY="$NEW_RELIC_APIKEY"
               echo "🔐 Volunteer Secrets criados com sucesso!"
 
               kubectl create secret generic newrelic-api-key -n monitoring-ns \
