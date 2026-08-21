@@ -52,7 +52,7 @@ variable "secrets" {
 
 variable "buckets" {
   type = map(object({
-    bucket_name     = string
+    bucket_name   = string
     labels_bucket = map(string)
   }))
 }

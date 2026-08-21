@@ -17,7 +17,7 @@ locals {
 # }
 
 module "cloud_storage" {
-  source = "./modules/bucket"
+  source   = "./modules/bucket"
   for_each = var.buckets
 
   project_id    = var.project_id
@@ -102,7 +102,7 @@ module "iam" {
   artreg         = var.artreg
   sa_inside_gke  = var.sa_inside_gke
   sa_gke_name    = module.service_accounts.sa_name["sa-gke-fiap"]
-  buckets = var.buckets
+  buckets        = var.buckets
   secrets = {
     aws_access_key_id     = var.aws_access_key_id
     aws_secret_access_key = var.aws_secret_access_key

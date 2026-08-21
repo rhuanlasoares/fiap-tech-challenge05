@@ -36,9 +36,9 @@ resource "google_artifact_registry_repository_iam_member" "artreg_member" {
 
 resource "google_storage_bucket_iam_member" "bucket_user" {
   for_each = var.buckets
-  role   = "roles/storage.objectUser"
-  member = var.sa_gke_member
-  bucket = each.value.bucket_name
+  role     = "roles/storage.objectUser"
+  member   = var.sa_gke_member
+  bucket   = each.value.bucket_name
 }
 
 resource "google_secret_manager_secret_iam_member" "secret_member" {
@@ -57,7 +57,7 @@ locals {
     job-service       = "job-ns"
     argocd            = "argocd"
     loki              = "monitoring-ns"
-    velero = "velero"
+    velero            = "velero"
   }
 }
 
