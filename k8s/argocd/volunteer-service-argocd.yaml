@@ -13,7 +13,7 @@ spec:
   source:
     repoURL: git@github.com:rhuanlasoares/fiap-tech-challenge05.git
     targetRevision: main
-    path: k8s/microsserivces/volunteer-service
+    path: k8s/microsservices/volunteer-service
   destination:
     server: https://kubernetes.default.svc
     namespace: volunteer-ns

@@ -13,7 +13,7 @@ spec:
   source:
     repoURL: git@github.com:rhuanlasoares/fiap-tech-challenge05.git
     targetRevision: main
-    path: k8s/microsserivces/ngo-service
+    path: k8s/microsservices/ngo-service
   destination:
     server: https://kubernetes.default.svc
     namespace: ngo-ns
