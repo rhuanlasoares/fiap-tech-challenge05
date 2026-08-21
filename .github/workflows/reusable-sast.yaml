@@ -128,7 +128,7 @@ jobs:
         if: always()
         working-directory: ${{ inputs.service_path }}
         run: |
-          REPORT_FILE="../issue-gosec.md"
+          REPORT_FILE="issue-gosec.md"
 
           echo "---" > $REPORT_FILE
           echo "title: '[SAST][Go] Gosec — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
@@ -203,7 +203,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         with:
-          filename: issue-gosec.md
+          filename: ${{ inputs.service_path }}/issue-gosec.md
           update_existing: true
 
   sast-python:
@@ -302,7 +302,7 @@ jobs:
         if: always()
         working-directory: ${{ inputs.service_path }}
         run: |
-          REPORT_FILE="../issue-bandit.md"
+          REPORT_FILE="issue-bandit.md"
 
           echo "---" > $REPORT_FILE
           echo "title: '[SAST][Python] Bandit — Vulnerabilidades em ${{ inputs.service_path }}'" >> $REPORT_FILE
@@ -374,7 +374,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         with:
-          filename: issue-bandit.md
+          filename: ${{ inputs.service_path }}/issue-bandit.md
           update_existing: true
 
   secret-scan:

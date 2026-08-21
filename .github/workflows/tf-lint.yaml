@@ -1,4 +1,4 @@
-name: Terraform Lint & Validate
+﻿name: Terraform Lint & Validate
 
 on:
   push:
@@ -29,11 +29,12 @@ jobs:
         working-directory: iac/terraform
 
     steps:
-      # 📥 2. Checkout na branch correta (inclusive em Pull Requests)
+      # 📥 2. Checkout completo com histórico (fetch-depth: 0)
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -53,7 +54,7 @@ jobs:
         id: auto_fmt
         run: terraform fmt -recursive
 
-      # 💾 4. Comita e envia as correções de formatação se houver mudanças
+      # 💾 4. Comita e envia as correções com rebase seguro
       - name: 💾 Commit and push changes
         run: |
           git config user.name "GitHub Actions Bot"
@@ -64,8 +65,9 @@ jobs:
           if git diff --staged --quiet; then
             echo "⚠️ No formatting changes needed."
           else
-            # [skip ci] evita loop infinito de execuções no GitHub Actions
             git commit -m "style(terraform): auto-format files [skip ci]"
+            # Sincroniza com o repositório remoto para evitar rejeição de push
+            git pull --rebase origin ${{ github.head_ref || github.ref_name }}
             git push origin HEAD:${{ github.head_ref || github.ref_name }}
             echo "✅ Formatted files pushed to repository."
           fi
