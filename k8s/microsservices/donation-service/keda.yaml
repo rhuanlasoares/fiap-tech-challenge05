@@ -1,14 +1,15 @@
-apiVersion: keda.sh/v1alpha1
+﻿apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: donation-keda
   namespace: donation-ns
 spec:
   scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
     name: donation-service
   minReplicaCount: 3
   maxReplicaCount: 15
-  cooldownPeriod: 60
   triggers:
     # 🔴 Trigger 1: Fila AWS SQS (Trabalho Assíncrono)
     # Escala quando a fila tiver mais de 10 mensagens por pod
