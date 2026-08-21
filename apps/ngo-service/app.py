@@ -1,19 +1,25 @@
-﻿import os
+﻿import logging
+import os
 import sys
-import logging
+
 import psycopg2
+from flask import Flask, jsonify, request
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
-from flask import Flask, request, jsonify
 
 # Inicialização do New Relic Agent com suporte a AI Monitoring (AIM)
 try:
     import newrelic.agent
+
     newrelic.agent.initialize()
 except Exception as nr_err:
-    logging.getLogger(__name__).warning(f"New Relic initialization skipped or failed: {nr_err}")
+    logging.getLogger(__name__).warning(
+        f"New Relic initialization skipped or failed: {nr_err}"
+    )
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -30,24 +36,26 @@ except Exception as e:
     log.critical(f"Erro ao conectar ao PostgreSQL: {e}")
     sys.exit(1)
 
-@app.route('/ngo-service/health')
-@app.route('/health')
+
+@app.route("/ngo-service/health")
+@app.route("/health")
 def health():
     return jsonify({"status": "ok", "service": "ngo-service"})
 
-@app.route('/ngo-service/ngos', methods=['POST'])
-@app.route('/ngos', methods=['POST'])
+
+@app.route("/ngo-service/ngos", methods=["POST"])
+@app.route("/ngos", methods=["POST"])
 def create_ngo():
     data = request.get_json()
-    if not data or not all(k in data for k in ('name', 'email', 'cause', 'city')):
+    if not data or not all(k in data for k in ("name", "email", "cause", "city")):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
-    
+
     conn = pool.getconn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 "INSERT INTO ngos (name, email, cause, city) VALUES (%s, %s, %s, %s) RETURNING *",
-                (data['name'], data['email'], data['cause'], data['city'])
+                (data["name"], data["email"], data["cause"], data["city"]),
             )
             new_ngo = cur.fetchone()
             conn.commit()
@@ -62,8 +70,9 @@ def create_ngo():
     finally:
         pool.putconn(conn)
 
-@app.route('/ngos', methods=['GET'])
-@app.route('/ngo-service/ngos', methods=['GET'])
+
+@app.route("/ngos", methods=["GET"])
+@app.route("/ngo-service/ngos", methods=["GET"])
 def get_ngos():
     conn = pool.getconn()
     try:
@@ -76,6 +85,7 @@ def get_ngos():
     finally:
         pool.putconn(conn)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     port = int(os.getenv("PORT", 8081))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=port)
