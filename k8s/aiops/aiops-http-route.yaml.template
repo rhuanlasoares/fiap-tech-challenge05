@@ -1,0 +1,20 @@
+---
+kind: HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: aiops-httproute
+  namespace: aiops
+spec:
+  parentRefs:
+  - name: gateway-applications
+    namespace: gateway-api-ns
+  hostnames:
+  - "aiops.${GATEWAY_IP}.nip.io"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: aiops-engine
+      port: 8000

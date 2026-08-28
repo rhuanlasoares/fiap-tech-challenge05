@@ -193,5 +193,3 @@ Finalize mostrando a tabela de conformidade SRE do projeto:
 | **Detecção de Desastre** | GCP Status Checker (CronJob) | Alerta proativo no Slack / New Relic |
 | **DR de Dados** | Cloud SQL Cross-Region Replica | Failover com RPO quase zero |
 | **DR de Cluster** | Velero Helm + Google Cloud Storage (GCS) | Restauração completa com RTO < 2 minutos |
-
-Edited tf-lint.yaml

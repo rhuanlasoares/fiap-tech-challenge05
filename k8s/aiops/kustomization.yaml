@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: aiops
+
+resources:
+  - rollout.yaml
+  - rbac.yaml
+  - service.yaml
+  - health-check.yaml
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app: aiops-engine
+
+images:
+  - name: aiops-engine
+    newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-aiops/aiops
+    newTag: latest

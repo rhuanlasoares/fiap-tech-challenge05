@@ -58,6 +58,7 @@ locals {
     argocd            = "argocd"
     loki              = "monitoring-ns"
     velero            = "velero"
+    aiops             = "aiops"
   }
 }
 

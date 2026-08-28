@@ -113,11 +113,11 @@ resource "google_secret_manager_secret" "sm_sqs_queue_url" {
   deletion_protection = false
 }
 
+
 resource "google_secret_manager_secret_version" "sm_sqs_queue_url_version" {
   secret      = google_secret_manager_secret.sm_sqs_queue_url.id
   secret_data = var.sm_sqs_queue_url["secret_data"]
 }
-
 resource "google_secret_manager_secret" "new_relic_api_key" {
   project   = var.project_id
   secret_id = var.new_relic_api_key["secret_id"]
@@ -136,4 +136,45 @@ resource "google_secret_manager_secret" "new_relic_api_key" {
 resource "google_secret_manager_secret_version" "new_relic_api_key_version" {
   secret      = google_secret_manager_secret.new_relic_api_key.id
   secret_data = var.new_relic_api_key["secret_data"]
+}
+
+
+resource "google_secret_manager_secret" "gemini_api_key" {
+  project   = var.project_id
+  secret_id = var.gemini_api_key["secret_id"]
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+
+  deletion_protection = false
+}
+
+resource "google_secret_manager_secret_version" "gemini_api_key_version" {
+  secret      = google_secret_manager_secret.gemini_api_key.id
+  secret_data = var.gemini_api_key["secret_data"]
+}
+
+resource "google_secret_manager_secret" "webhook_slack" {
+  project   = var.project_id
+  secret_id = var.webhook_slack["secret_id"]
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+
+  deletion_protection = false
+}
+
+resource "google_secret_manager_secret_version" "webhook_slack_version" {
+  secret      = google_secret_manager_secret.webhook_slack.id
+  secret_data = var.webhook_slack["secret_data"]
 }

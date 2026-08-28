@@ -47,3 +47,27 @@ variable "should_be_create" {
   type        = bool
   description = "Enable or disable the creation of the GKE Cluster."
 }
+
+variable "machine_type" {
+  type        = string
+  description = "The machine type of the GKE Node Pool."
+  default     = "e2-medium"
+}
+
+variable "min_node_count" {
+  type        = number
+  description = "The minimum number of nodes per zone in the Node Pool."
+  default     = 1
+}
+
+variable "max_node_count" {
+  type        = number
+  description = "The maximum number of nodes per zone in the Node Pool."
+  default     = 5
+}
+
+variable "initial_node_count" {
+  type        = number
+  description = "The initial number of nodes per zone in the Node Pool."
+  default     = 2
+}

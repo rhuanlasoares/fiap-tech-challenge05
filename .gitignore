@@ -1,5 +1,7 @@
 credential
 
+*__pycache__
+
 **/*http-route.yaml
 k8s/monitoring/new_relic_secret.yaml
 scripts/cleanup-gcp-resources.sh

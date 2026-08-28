@@ -63,3 +63,19 @@ variable "new_relic_api_key" {
   })
   sensitive = true
 }
+
+variable "gemini_api_key" {
+  type = object({
+    secret_id   = string
+    secret_data = string
+  })
+  sensitive = true
+}
+
+variable "webhook_slack" {
+  type = object({
+    secret_id   = string
+    secret_data = string
+  })
+  sensitive = true
+}

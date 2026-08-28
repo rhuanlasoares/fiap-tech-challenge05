@@ -177,6 +177,22 @@ variable "new_relic_api_key" {
   sensitive = true
 }
 
+variable "gemini_api_key" {
+  type = object({
+    secret_id   = string
+    secret_data = string
+  })
+  sensitive = true
+}
+
+variable "webhook_slack" {
+  type = object({
+    secret_id   = string
+    secret_data = string
+  })
+  sensitive = true
+}
+
 variable "workload_identity_pool_id" {
   type        = string
   description = "The ID used for the pool, which is the final component of the pool resource name"

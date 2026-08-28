@@ -15,3 +15,7 @@ docker push southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-volunteer
 cd ../gcp-status-checker
 docker build -t southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-status/gcp-status-checker .
 docker push southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-status/gcp-status-checker
+
+cd ../aiops-engine
+docker build -t southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-aiops/aiops .
+docker push southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-aiops/aiops

@@ -21,3 +21,4 @@ ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/kubecost.yaml -e "e
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/argocd.yaml -e "env=$K8S_DIR"
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/argo-rollouts.yaml -e "env=$K8S_DIR"
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/applications.yaml -e "env=$K8S_DIR"
+ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/aiops.yaml -e "env=$K8S_DIR"

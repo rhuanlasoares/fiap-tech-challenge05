@@ -1,41 +1,44 @@
----
+﻿---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: job-service-secret
+  name: secrets-setup-job
   namespace: job-ns
 spec:
-  backoffLimit: 3
   template:
-    metadata:
-      labels:
-        app: job-service
     spec:
+      serviceAccountName: sa-job-secrets
       restartPolicy: OnFailure
-      serviceAccountName: sa-gke
-      containers:
-        - name: job-service-secret
-          image: google/cloud-sdk:alpine
-          resources:
-            requests:
-              memory: 128Mi
-              cpu: 768m
-            limits:
-              memory: 256Mi
-              cpu: 1024m
+      initContainers:
+        - name: wait-for-namespaces
+          image: bitnami/kubectl:latest
           command:
-            - sh
+            - /bin/sh
             - -c
             - |
-              set -e
+              echo "⏳ Aguardando os namespaces serem criados..."
+              until kubectl get ns donation-ns && kubectl get ns ngo-ns && kubectl get ns volunteer-ns && kubectl get ns monitoring-ns && kubectl get ns aiops; do
+                echo "⏳ Namespaces ainda não estão prontos. Tentando novamente em 5 segundos..."
+                sleep 5
+              done
+              echo "✅ Todos os namespaces foram encontrados!"
+      containers:
+        - name: secret-manager-extractor
+          image: google/cloud-sdk:alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Instalar o kubectl dentro da imagem do gcloud
+              curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              chmod +x kubectl
+              mv kubectl /usr/local/bin/
 
-              gcloud config set project $PROJECT_ID
+              echo "🔐 Extraindo segredos do Google Secret Manager..."
 
-              apk update
-
-              apk add --no-cache kubectl jq curl
-
-              # ── Fetch secrets uma única vez ──────────────────────────────
+              # ─────────────────────────────────────────────────────────────
+              # Extrai dados do Secret Manager
+              # ─────────────────────────────────────────────────────────────
               NGO_DB_SECRET_MANAGER=$(gcloud secrets versions access latest --secret=$NGO_DB_SECRET_MANAGER)
               DONATION_DB_SECRET_MANAGER=$(gcloud secrets versions access latest --secret=$DONATION_DB_SECRET_MANAGER)
               AWS_KEY_ID=$(gcloud secrets versions access latest --secret=$NAME_SM_ACCESS_KEY_ID)
@@ -43,6 +46,8 @@ spec:
               AWS_TOKEN=$(gcloud secrets versions access latest --secret=$NAME_SM_SESSION_TOKEN)
               SQS_URL=$(gcloud secrets versions access latest --secret=$NAME_SM_SQS_QUEUE_URL)
               NEW_RELIC_APIKEY=$(gcloud secrets versions access latest --secret=$NEW_RELIC_APIKEY)
+              GEMINI_API_KEY=$(gcloud secrets versions access latest --secret=$GEMINI_API_KEY)
+              SLACK_WEBHOOK_URL=$(gcloud secrets versions access latest --secret=$SLACK_WEBHOOK_URL)
               # ─────────────────────────────────────────────────────────────
 
               kubectl create secret generic donation-secrets-job -n donation-ns \
@@ -72,6 +77,11 @@ spec:
                 --from-literal=NEW_RELIC_APIKEY="$NEW_RELIC_APIKEY"
               echo "🔐 New Relic Secrets criados com sucesso!"
 
+              kubectl create secret generic api-keys -n aiops \
+                --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
+                --from-literal=SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL"
+              echo "🔐 API Keys Secrets criados com sucesso!"
+
               echo "🚀 Setup concluído com sucesso!"
           env:
             - name: PROJECT_ID
@@ -79,11 +89,6 @@ spec:
                 secretKeyRef:
                   name: job-secrets
                   key: PROJECT_ID
-            - name: DB_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: job-secrets
-                  key: DB_PORT
             - name: REGION_GCP
               valueFrom:
                 secretKeyRef:
@@ -94,6 +99,11 @@ spec:
                 secretKeyRef:
                   name: job-secrets
                   key: DB_USER
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: DB_PORT
             - name: DB_NGO_NAME
               valueFrom:
                 secretKeyRef:
@@ -139,3 +149,13 @@ spec:
                 secretKeyRef:
                   name: job-secrets
                   key: NEW_RELIC_APIKEY
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: GEMINI_API_KEY
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: job-secrets
+                  key: SLACK_WEBHOOK_URL

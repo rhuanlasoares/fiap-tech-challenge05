@@ -84,6 +84,8 @@ module "secret_manager" {
   donation_secret       = var.cloud_sql["donation-service"].password
   sm_sqs_queue_url      = local.sqs_queue_url
   new_relic_api_key     = var.new_relic_api_key
+  gemini_api_key        = var.gemini_api_key
+  webhook_slack         = var.webhook_slack
 }
 
 module "iam" {
@@ -111,6 +113,8 @@ module "iam" {
     donation_secret       = var.cloud_sql["donation-service"].password
     sm_sqs_queue_url      = local.sqs_queue_url
     new_relic_api_key     = var.new_relic_api_key
+    gemini_api_key        = var.gemini_api_key
+    webhook_slack         = var.webhook_slack
   }
 }
 
