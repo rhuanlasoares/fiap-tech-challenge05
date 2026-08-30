@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 
 cd apps/ngo-service
 docker build -t southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-ngo-sa/ngo-service .

@@ -1,4 +1,4 @@
-﻿livenessProbe:
+livenessProbe:
   initialDelaySeconds: 15
   periodSeconds: 10
   failureThreshold: 5

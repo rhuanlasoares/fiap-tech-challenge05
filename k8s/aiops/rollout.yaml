@@ -10,10 +10,12 @@ spec:
   strategy:
     canary:
       steps:
-        - setWeight: 20
-        - pause: { duration: 1m }
-        - setWeight: 50
-        - pause: { duration: 1m }
+      - setWeight: 20
+      - pause:
+          duration: 1m
+      - setWeight: 50
+      - pause:
+          duration: 1m
   selector:
     matchLabels:
       app: aiops-engine
@@ -25,92 +27,104 @@ spec:
       serviceAccountName: aiops-sa
       terminationGracePeriodSeconds: 30
       containers:
-        - name: aiops-engine
-          image: aiops-engine
-          imagePullPolicy: Always
-          lifecycle:
-            preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 5"]
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            failureThreshold: 30
-            periodSeconds: 2
-            timeoutSeconds: 3
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          ports:
-            - containerPort: 8000
-          env:
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "grpc"
-            - name: OTEL_EXPORTER_OTLP_INSECURE
-              value: "true"
-            - name: OTEL_RESOURCE_ATTRIBUTES
-              value: "service.namespace=aiops,deployment.environment=production,service.name=aiops-engine"
-            - name: OTEL_TRACES_EXPORTER
-              value: "otlp"
-            - name: OTEL_METRICS_EXPORTER
-              value: "otlp"
-            - name: OTEL_LOGS_EXPORTER
-              value: "otlp"
-            - name: OTEL_SERVICE_NAME
-              value: "aiops-engine"
-            - name: PROMETHEUS_URL
-              value: "http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090"
-            - name: LOKI_URL
-              value: "http://loki-gateway.monitoring-ns.svc.cluster.local:80"
-            - name: TARGET_NAMESPACES
-              value: "donation-ns,ngo-ns,volunteer-ns,monitoring-ns,kubecost"
-            - name: AUTO_HEALING_ENABLED
-              value: "false"
-            - name: ANALYSIS_INTERVAL_SECONDS
-              value: "20"
-            - name: SLACK_WEBHOOK_URL
-              valueFrom:
-                secretKeyRef:
-                  name: api-keys
-                  key: SLACK_WEBHOOK_URL
-            - name: GEMINI_MODEL
-              value: "gemini-3.5-flash-lite"
-            - name: GEMINI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: api-keys
-                  key: GEMINI_API_KEY
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+      - name: aiops-engine
+        image: aiops-engine
+        imagePullPolicy: Always
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - sleep 5
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          failureThreshold: 30
+          periodSeconds: 2
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        ports:
+        - containerPort: 8000
+        env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: opentelemetry-collector.monitoring-ns.svc.cluster.local:4317
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: grpc
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: 'true'
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=aiops,deployment.environment=production,service.name=aiops-engine
+        - name: OTEL_TRACES_EXPORTER
+          value: otlp
+        - name: OTEL_METRICS_EXPORTER
+          value: otlp
+        - name: OTEL_LOGS_EXPORTER
+          value: otlp
+        - name: OTEL_SERVICE_NAME
+          value: aiops-engine
+        - name: PROMETHEUS_URL
+          value: http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090
+        - name: LOKI_URL
+          value: http://loki-gateway.monitoring-ns.svc.cluster.local:80
+        - name: TARGET_NAMESPACES
+          value: donation-ns,ngo-ns,volunteer-ns,monitoring-ns,kubecost
+        - name: AUTO_HEALING_ENABLED
+          value: 'false'
+        - name: ANALYSIS_INTERVAL_SECONDS
+          value: '20'
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: SLACK_WEBHOOK_URL
+        - name: GEMINI_MODEL
+          value: gemini-3.5-flash-lite
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: GEMINI_API_KEY
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
       topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchLabels:
-              app: aiops-engine
-        - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: DoNotSchedule
-          labelSelector:
-            matchLabels:
-              app: aiops-engine
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: aiops-engine
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: aiops-engine
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault

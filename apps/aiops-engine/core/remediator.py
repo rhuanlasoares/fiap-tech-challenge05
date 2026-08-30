@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import requests
 from typing import Dict, Any, Optional
 from core.config import settings

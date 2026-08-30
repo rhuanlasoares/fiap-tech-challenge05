@@ -85,6 +85,7 @@ jobs:
       region: southamerica-east1
       service_path: apps/ngo-service
     secrets:
-      PROJECT_ID: ces-igniteprogram
+      PROJECT_ID: ${{ secrets.PROJECT_ID || 'ces-igniteprogram' }}
       WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
       SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

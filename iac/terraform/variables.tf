@@ -15,7 +15,8 @@ variable "region" {
 }
 
 variable "zone" {
-  type = string
+  type        = string
+  description = "The GCP zone for single-zone resources."
 }
 
 ### APIs Module Variables
@@ -26,6 +27,7 @@ variable "services_apis_list" {
 
 ### Bucket
 variable "buckets" {
+  description = "Map of GCS buckets to create with configuration."
   type = map(object({
     bucket_name   = string
     labels_bucket = map(string)
@@ -121,6 +123,7 @@ variable "replica_region" {
 
 ### GKE Module Variables
 variable "gke" {
+  description = "Map of GKE cluster configurations."
   type = map(object({
     cluster_name     = string
     region           = string
@@ -134,6 +137,7 @@ variable "gke_resource_labels" {
 }
 
 variable "artreg" {
+  description = "Map of Artifact Registry repositories to create."
   type = map(object({
     name_artreg = string
     description = string
@@ -142,7 +146,8 @@ variable "artreg" {
 }
 
 variable "sa_inside_gke" {
-  type = string
+  type        = string
+  description = "Service Account name inside the GKE cluster."
 }
 
 variable "aws_access_key_id" {

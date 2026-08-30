@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -7,6 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"errors"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -150,8 +153,36 @@ func main() {
 
 	handler := HTTPMiddleware(mux)
 
-	LogInfo(ctx, "donation-service rodando na porta "+port)
-	log.Fatal(http.ListenAndServe(":"+port, handler))
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	go func() {
+		LogInfo(ctx, "donation-service rodando na porta "+port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Falha no servidor HTTP: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	LogInfo(ctx, "Recebido sinal de encerramento. Finalizando servidor graciosamente...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Erro ao encerrar servidor HTTP: %v", err)
+	}
+	if db != nil {
+		_ = db.Close()
+	}
+	LogInfo(ctx, "Servico finalizado com sucesso.")
 }
 
 func (a *App) HealthHandler(w http.ResponseWriter, r *http.Request) {
@@ -300,6 +331,15 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			donations = append(donations, d)
+		}
+
+		if err := rows.Err(); err != nil {
+			if txn != nil {
+				txn.NoticeError(err)
+			}
+			RecordError(ctx, err, "db_rows_error", "Erro na iteracao dos registros de doacao")
+			http.Error(w, `{"error":"Erro interno"}`, http.StatusInternalServerError)
+			return
 		}
 
 		json.NewEncoder(w).Encode(donations)

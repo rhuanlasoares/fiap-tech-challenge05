@@ -4,14 +4,37 @@ metadata:
   name: donation-netpol
   namespace: donation-ns
 spec:
-  podSelector: {}
+  podSelector:
+    matchLabels:
+      app: donation-service
   policyTypes:
-  - Ingress
-  - Egress
+    - Ingress
+    - Egress
   ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: monitoring-ns
+    # Trafego do Gateway API
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gateway-api-ns
+      ports:
+        - protocol: TCP
+          port: 8082
+    # Trafego de monitoramento (Prometheus, Loki, OTel)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring-ns
+      ports:
+        - protocol: TCP
+          port: 8082
+    # Health checks do GCP Cloud Load Balancer
+    - from:
+        - ipBlock:
+            cidr: 35.191.0.0/16
+        - ipBlock:
+            cidr: 130.211.0.0/22
+      ports:
+        - protocol: TCP
+          port: 8082
   egress:
-  - {}
+    - {}

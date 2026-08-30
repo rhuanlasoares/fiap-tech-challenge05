@@ -1,4 +1,4 @@
-﻿import os
+import os
 
 class Settings:
     PROMETHEUS_URL: str = os.getenv("PROMETHEUS_URL", "http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090")

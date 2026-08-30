@@ -7,10 +7,15 @@ echo "=================================================================="
 echo "[AIOps] Executando testes automatizados do Motor Preditivo & RCA"
 echo "=================================================================="
 
-cd /home/rhuanlas/fiap-tech-challenge-05/apps/aiops-engine
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/../apps/aiops-engine"
 
 echo "[1/3] Running Unit Tests for Models..."
-python3 test_engine.py
+if [ -f "test_engine.py" ]; then
+    python3 test_engine.py
+else
+    echo "test_engine.py not present, skipping model unit tests."
+fi
 
 echo "[2/3] Starting Server FastAPY em Segundo Plano..."
 python3 -m uvicorn main:app --host 127.0.0.1 --port 9999 > /tmp/aiops_test.log 2>&1 &

@@ -1,4 +1,4 @@
-﻿apiVersion: argoproj.io/v1alpha1
+apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
   name: volunteer-service
@@ -11,16 +11,18 @@ spec:
     canary:
       analysis:
         templates:
-          - templateName: volunteer-golden-signals-analysis
+        - templateName: volunteer-golden-signals-analysis
         args:
-          - name: canary-hash
-            valueFrom:
-              podTemplateHashValue: Latest
+        - name: canary-hash
+          valueFrom:
+            podTemplateHashValue: Latest
       steps:
-        - setWeight: 20
-        - pause: { duration: 2m }
-        - setWeight: 50
-        - pause: { duration: 2m }
+      - setWeight: 20
+      - pause:
+          duration: 2m
+      - setWeight: 50
+      - pause:
+          duration: 2m
   selector:
     matchLabels:
       app: volunteer-service
@@ -32,119 +34,131 @@ spec:
       serviceAccountName: sa-gke
       terminationGracePeriodSeconds: 30
       containers:
-        - name: volunteer-service
-          image: volunteer-service
-          imagePullPolicy: Always
-          lifecycle:
-            preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 10"]
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 8083
-            failureThreshold: 30
-            periodSeconds: 2
-            timeoutSeconds: 3
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8083
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8083
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          ports:
-            - containerPort: 8083
-          env:
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: volunteer-secrets-job
-                  key: AWS_ACCESS_KEY_ID
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: volunteer-secrets-job
-                  key: AWS_SECRET_ACCESS_KEY
-            - name: AWS_SESSION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: volunteer-secrets-job
-                  key: AWS_SESSION_TOKEN
-            - name: PORT
-              valueFrom:
-                secretKeyRef:
-                  name: volunteer-secrets
-                  key: PORT
-            - name: AWS_REGION
-              valueFrom:
-                secretKeyRef:
-                  name: volunteer-secrets
-                  key: AWS_REGION
-            - name: AWS_DYNAMODB_TABLE
-              valueFrom:
-                secretKeyRef:
-                  name: volunteer-secrets
-                  key: AWS_DYNAMODB_TABLE
-            - name: NEW_RELIC_LICENSE_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: volunteer-secrets-job
-                  key: NEW_RELIC_APIKEY
-            - name: NEW_RELIC_APP_NAME
-              value: volunteer-service
-            - name: NEW_RELIC_DISTRIBUTED_TRACING_ENABLED
-              value: "true"
-            - name: NEW_RELIC_AI_MONITORING_ENABLED
-              value: "true"
-            - name: NEW_RELIC_AI_MONITORING_RECORD_CONTENT_ENABLED
-              value: "true"
-            - name: NEW_RELIC_AI_MONITORING_STREAMING_ENABLED
-              value: "true"
-            - name: NEW_RELIC_APPLICATION_LOGGING_ENABLED
-              value: "true"
-            - name: NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED
-              value: "true"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "grpc"
-            - name: OTEL_EXPORTER_OTLP_INSECURE
-              value: "true"
-            - name: OTEL_RESOURCE_ATTRIBUTES
-              value: "service.namespace=volunteer-ns,deployment.environment=production,service.name=volunteer-service"
-            - name: OTEL_TRACES_EXPORTER
-              value: "otlp"
-            - name: OTEL_METRICS_EXPORTER
-              value: "otlp"
-            - name: OTEL_LOGS_EXPORTER
-              value: "otlp"
-            - name: OTEL_SERVICE_NAME
-              value: "volunteer-service"
-          resources:
-            requests:
-              cpu: 78m
-              memory: 64Mi
-            limits:
-              cpu: 512m
-              memory: 512Mi
+      - name: volunteer-service
+        image: volunteer-service
+        imagePullPolicy: Always
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - sleep 10
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          failureThreshold: 30
+          periodSeconds: 2
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        ports:
+        - containerPort: 8083
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: volunteer-secrets-job
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: volunteer-secrets-job
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: volunteer-secrets-job
+              key: AWS_SESSION_TOKEN
+        - name: PORT
+          valueFrom:
+            secretKeyRef:
+              name: volunteer-secrets
+              key: PORT
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: volunteer-secrets
+              key: AWS_REGION
+        - name: AWS_DYNAMODB_TABLE
+          valueFrom:
+            secretKeyRef:
+              name: volunteer-secrets
+              key: AWS_DYNAMODB_TABLE
+        - name: NEW_RELIC_LICENSE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: volunteer-secrets-job
+              key: NEW_RELIC_APIKEY
+        - name: NEW_RELIC_APP_NAME
+          value: volunteer-service
+        - name: NEW_RELIC_DISTRIBUTED_TRACING_ENABLED
+          value: 'true'
+        - name: NEW_RELIC_AI_MONITORING_ENABLED
+          value: 'true'
+        - name: NEW_RELIC_AI_MONITORING_RECORD_CONTENT_ENABLED
+          value: 'true'
+        - name: NEW_RELIC_AI_MONITORING_STREAMING_ENABLED
+          value: 'true'
+        - name: NEW_RELIC_APPLICATION_LOGGING_ENABLED
+          value: 'true'
+        - name: NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED
+          value: 'true'
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: opentelemetry-collector.monitoring-ns.svc.cluster.local:4317
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: grpc
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: 'true'
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=volunteer-ns,deployment.environment=production,service.name=volunteer-service
+        - name: OTEL_TRACES_EXPORTER
+          value: otlp
+        - name: OTEL_METRICS_EXPORTER
+          value: otlp
+        - name: OTEL_LOGS_EXPORTER
+          value: otlp
+        - name: OTEL_SERVICE_NAME
+          value: volunteer-service
+        resources:
+          requests:
+            cpu: 78m
+            memory: 64Mi
+          limits:
+            cpu: 512m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
       topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchLabels:
-              app: volunteer-service
-        - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: DoNotSchedule
-          labelSelector:
-            matchLabels:
-              app: volunteer-service
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: volunteer-service
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: volunteer-service
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault

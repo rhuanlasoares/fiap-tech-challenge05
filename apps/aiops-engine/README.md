@@ -1,4 +1,4 @@
-﻿# 🧠 AIOps Predictive Engine (FastAPI + Machine Learning + Google Gemini GenAI)
+# 🧠 AIOps Predictive Engine (FastAPI + Machine Learning + Google Gemini GenAI)
 
 O **AIOps Engine** é o cérebro operacional e de auto-remediação (*Self-Healing*) da plataforma **SolidaryTech**. Ele atua como um engenheiro autônomo de Site Reliability Engineering (SRE), realizando coleta contínua de telemetria, detecção antecipada de anomalias via Machine Learning, diagnóstico inteligente de causa raiz (RCA) via **Google Gemini GenAI** e auto-recuperação de incidentes no Kubernetes.
 

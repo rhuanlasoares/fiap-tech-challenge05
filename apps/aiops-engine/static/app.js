@@ -1,4 +1,4 @@
-﻿async function fetchStatus() {
+async function fetchStatus() {
   try {
     const res = await fetch('/api/status');
     if (res.ok) {

@@ -1,4 +1,4 @@
-﻿# ☸️ Kubernetes, GitOps, Roteamento & Observabilidade
+# ☸️ Kubernetes, GitOps, Roteamento & Observabilidade
 
 Esta pasta contém todos os manifests e especificações declarativas para o ecossistema Kubernetes rodando no **Google Kubernetes Engine (GKE)**.
 

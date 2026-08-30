@@ -1,4 +1,4 @@
-﻿FROM python:3.14.7-alpine3.24 AS builder
+FROM python:3.14.7-alpine3.24 AS builder
 
 WORKDIR /app
 
@@ -9,8 +9,7 @@ FROM python:3.14.7-alpine3.24 AS production
 
 RUN adduser -D -s /bin/sh appuser
 
-RUN apk update && apk upgrade && \
-    apk add --no-cache postgresql-client
+RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 

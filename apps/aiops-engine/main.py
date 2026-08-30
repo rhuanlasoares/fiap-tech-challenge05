@@ -1,4 +1,5 @@
-﻿import os
+import threading
+import os
 import logging
 import asyncio
 from contextlib import asynccontextmanager
@@ -26,6 +27,8 @@ k8s = K8sClient()
 predictor = AiOpsPredictor()
 reasoner = AasReasoner()
 remediator = AiOpsRemediator(k8s)
+
+state_lock = threading.Lock()
 
 state = {
     "current_score": 100,
@@ -88,15 +91,16 @@ def sync_analysis_cycle():
                     logger.warning(f"AUTO-HEALING: Automatically remediating {risk.get('id')}")
                     remediator.execute_preventive_action(risk)
 
-        state["current_score"] = score
-        state["predictions"] = all_predictions
-        state["anomalies"] = all_anomalies
-        state["insights"] = all_insights
-        state["log_errors"] = error_logs[-15:]
-        state["warning_events"] = events[-15:]
-        state["nodes"] = nodes_stat
-        state["pvcs"] = pvcs_stat
-        state["last_update"] = datetime.now(timezone.utc).isoformat()
+        with state_lock:
+            state["current_score"] = score
+            state["predictions"] = all_predictions
+            state["anomalies"] = all_anomalies
+            state["insights"] = all_insights
+            state["log_errors"] = error_logs[-15:]
+            state["warning_events"] = events[-15:]
+            state["nodes"] = nodes_stat
+            state["pvcs"] = pvcs_stat
+            state["last_update"] = datetime.now(timezone.utc).isoformat()
         
         logger.info(f"AIOps cycle complete. Health Score: {score}/100, Risks: {len(all_predictions)}, Anomalies: {len(all_anomalies)}")
     except Exception as e:

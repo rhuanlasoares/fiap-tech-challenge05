@@ -1,4 +1,4 @@
-﻿# 🏗️ Infraestrutura como Código (IaC) & Gerenciamento de Configuração
+# 🏗️ Infraestrutura como Código (IaC) & Gerenciamento de Configuração
 
 Esta pasta contém toda a automação de infraestrutura da plataforma **SolidaryTech**, dividida em duas camadas fundamentais:
 1. **[Terraform](./terraform)**: Provisionamento de recursos Cloud (GCP e AWS) e federação de identidades.

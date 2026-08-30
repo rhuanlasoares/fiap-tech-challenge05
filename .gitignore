@@ -1,10 +1,32 @@
+# Credenciais, Segredos e Variaveis de Ambiente
 credential
-
-*__pycache__
-
-**/*http-route.yaml
+*.env
+*.env.*
+!*.env.example
+*.pem
+*.key
 k8s/monitoring/new_relic_secret.yaml
+
+# Templates renderizados e scripts de limpeza
+**/*http-route.yaml
 scripts/cleanup-gcp-resources.sh
+
+# Python
+__pycache__/
+*__pycache__
+*.py[cod]
+*.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Go
+bin/
+*.exe
+*.test
+*.out
 
 # Local .terraform directories
 *.terraform/
@@ -17,15 +39,11 @@ scripts/cleanup-gcp-resources.sh
 crash.log
 crash.*.log
 
-# Exclude all .tfvars files, which are likely to contain sensitive data, such as
-# password, private keys, and other secrets. These should not be part of version
-# control as they are data points which are potentially sensitive and subject
-# to change depending on the environment.
+# Exclude all .tfvars files
 *.tfvars
 *.tfvars.json
 
-# Ignore override files as they are usually used to override resources locally and so
-# are not checked in
+# Ignore override files
 override.tf
 override.tf.json
 *_override.tf
@@ -34,12 +52,13 @@ override.tf.json
 # Ignore transient lock info files created by terraform apply
 .terraform.tfstate.lock.info
 
-# Include override files you do wish to add to version control using negated pattern
-# !example_override.tf
-
-# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
-# example: *tfplan*
-
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# IDEs e Sistema Operacional
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

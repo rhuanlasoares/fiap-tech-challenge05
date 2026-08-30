@@ -1,4 +1,4 @@
-﻿apiVersion: batch/v1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: gcp-status-checker-cron
@@ -6,9 +6,9 @@ metadata:
   labels:
     app: gcp-status-checker
 spec:
-  schedule: "*/1 * * * *"  # Executa a cada 1 minuto
-  successfulJobsHistoryLimit: 5  # Mantém o histórico dos últimos 5 jobs bem-sucedidos
-  failedJobsHistoryLimit: 3     # Mantém o histórico dos últimos 3 jobs com falha
+  schedule: '*/1 * * * *'
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
   jobTemplate:
     metadata:
       labels:
@@ -26,34 +26,30 @@ spec:
             imagePullPolicy: Always
             env:
             - name: TARGET_SERVICES
-              value: "Cloud SQL,Google Kubernetes Engine,Compute Engine,Cloud Storage,Artifact Registry"
+              value: Cloud SQL,Google Kubernetes Engine,Compute Engine,Cloud Storage,Artifact
+                Registry
             - name: TARGET_REGION
-              value: "southamerica-east1"
-            # =========================================================================
-            # MODO DE SIMULAÇÃO PARA DEMONSTRAÇÃO DE DISASTER RECOVERY / SELF-HEALING:
-            # Para simular uma falha na GCP, altere SIMULATION_MODE para "true"
-            # e defina os serviços afetados em SIMULATED_OUTAGE_SERVICES (ex: "Cloud SQL" ou "Google Kubernetes Engine")
-            # =========================================================================
+              value: southamerica-east1
             - name: SIMULATION_MODE
-              value: "false"  # "false" (Normal) ou "true" (Simulação de Desastre)
+              value: 'false'
             - name: SIMULATED_OUTAGE_SERVICES
-              value: "Cloud SQL" # Serviços afetados na simulação
+              value: Cloud SQL
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317"
+              value: opentelemetry-collector.monitoring-ns.svc.cluster.local:4317
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "grpc"
+              value: grpc
             - name: OTEL_EXPORTER_OTLP_INSECURE
-              value: "true"
+              value: 'true'
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: "service.namespace=monitoring-ns,deployment.environment=production,service.name=gcp-status-checker"
+              value: service.namespace=monitoring-ns,deployment.environment=production,service.name=gcp-status-checker
             - name: OTEL_TRACES_EXPORTER
-              value: "otlp"
+              value: otlp
             - name: OTEL_METRICS_EXPORTER
-              value: "otlp"
+              value: otlp
             - name: OTEL_LOGS_EXPORTER
-              value: "otlp"
+              value: otlp
             - name: OTEL_SERVICE_NAME
-              value: "gcp-status-checker"
+              value: gcp-status-checker
             resources:
               requests:
                 cpu: 50m
@@ -61,4 +57,13 @@ spec:
               limits:
                 cpu: 100m
                 memory: 128Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
           restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault

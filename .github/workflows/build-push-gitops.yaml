@@ -1,4 +1,4 @@
-﻿name: Reusable — Build and Push Image
+name: Reusable — Build and Push Image
 
 on:
   workflow_call:
@@ -25,6 +25,8 @@ on:
         required: true
       SERVICE_ACCOUNT:
         required: true
+      GITHUB_TOKEN:
+        required: false
 
 jobs:
   build-and-push-image:
@@ -92,7 +94,7 @@ jobs:
       - name: 📥 Checkout código
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN || github.token }}
       
       # Baixa o binário oficial do Kustomize e o instala no runner
       - name: 🔧 Setup Kustomize
@@ -107,11 +109,18 @@ jobs:
           cd k8s/microsservices/${{ inputs.nameService }}
 
           echo "🔄 Updating image tag to: ${{ inputs.imageTag }}"
-          kustomize edit set image \
-            ${{ inputs.nameService }}=${{ inputs.imageName }}:${{ inputs.imageTag }}
+          kustomize edit set image             ${{ inputs.nameService }}=${{ inputs.imageName }}:${{ inputs.imageTag }}
           
           echo "✅ Kustomization updated"
           cat kustomization.yaml
+
+      # Testa a compilação do Kustomize localmente ANTES de comitar e publicar
+      - name: ✅ Validate Kubernetes manifests
+        run: |
+          echo "🔍 Validating manifests..."
+          cd k8s/microsservices/${{ inputs.nameService }}
+          kustomize build . > /tmp/manifests.yaml
+          echo "✅ Manifests are valid"
       
       # Configura o Git temporário para commitar a mudança no kustomization.yaml e fazer push
       - name: 💾 Commit and push changes
@@ -129,13 +138,3 @@ jobs:
             git push origin main
             echo "✅ Changes pushed to repository"
           fi
-
-      # Testa a compilação do Kustomize localmente para garantir que não introduzimos erros de sintaxe
-      - name: ✅ Validate Kubernetes manifests
-        run: |
-          echo "🔍 Validating manifests..."
-          cd k8s/microsservices/${{ inputs.nameService }}
-          
-          kustomize build . > /tmp/manifests.yaml
-          
-          echo "✅ Manifests are valid"

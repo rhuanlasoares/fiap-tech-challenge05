@@ -1,4 +1,4 @@
-﻿# 🌍 SolidaryTech Platform — Resiliência, Self-Healing, AIOps & Disaster Recovery
+# 🌍 SolidaryTech Platform — Resiliência, Self-Healing, AIOps & Disaster Recovery
 ### 🎓 FIAP Tech Challenge — Fase 5 (Pós-Graduação em Cloud & DevOps / SRE)
 
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-GKE-326ce5?logo=kubernetes&logoColor=white)
