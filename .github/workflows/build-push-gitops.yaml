@@ -25,7 +25,7 @@ on:
         required: true
       SERVICE_ACCOUNT:
         required: true
-      GITHUB_TOKEN:
+      TOKEN:
         required: false
 
 jobs:
@@ -94,7 +94,7 @@ jobs:
       - name: 📥 Checkout código
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN || github.token }}
+          token: ${{ secrets.TOKEN || github.token }}
       
       - name: 🔧 Setup Kustomize
         uses: imranismail/setup-kustomize@v2
