@@ -28,7 +28,6 @@ env:
 jobs:
   lint:
     name: 🔍 Lint
-    timeout-minutes: 10
     uses: ./.github/workflows/reusable-lint.yaml
     with:
       language: python
@@ -40,7 +39,6 @@ jobs:
   sca:
     name: 📦 SCA
     needs: lint
-    timeout-minutes: 15
     uses: ./.github/workflows/reusable-sca.yaml
     with:
       language: python
@@ -53,7 +51,6 @@ jobs:
   sast:
     name: 🔒 SAST
     needs: lint
-    timeout-minutes: 15
     uses: ./.github/workflows/reusable-sast.yaml
     with:
       language: python
@@ -66,7 +63,6 @@ jobs:
   container-scan:
     name: 🐳 Container Scan & Local Build
     needs: [sca, sast]
-    timeout-minutes: 15
     uses: ./.github/workflows/reusable-container-scan.yaml
     with:
       service_path: apps/aiops-engine
