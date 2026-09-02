@@ -384,4 +384,3 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		}
 	})
 }
-
