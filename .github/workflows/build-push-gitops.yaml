@@ -32,23 +32,24 @@ jobs:
   build-and-push-image:
     name: Build and Push Image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
-      # Clona o código-fonte do repositório para a máquina virtual (runner)
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Autentica no Google Cloud de forma segura usando Workload Identity Federation
-      - name: GCP Autentication
+      - name: GCP Authentication via WIF
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v2
         with:
           project_id: ${{ secrets.PROJECT_ID }}
           token_format: "access_token"
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.SERVICE_ACCOUNT }}
 
-      # Faz o login no Google Artifact Registry usando o token gerado no step anterior
       - name: Login to Artifact Registry
         uses: docker/login-action@v3
         with:
@@ -56,11 +57,9 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      # Configura o Docker Buildx para habilitar recursos avançados, como cache de build
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Constrói a imagem Docker a partir do diretório do serviço e a envia (push) para o registro
       - name: Build & push image to GAR
         id: push
         uses: docker/build-push-action@v5
@@ -76,7 +75,6 @@ jobs:
             GIT_COMMIT=${{ inputs.imageTag }}
             GIT_BRANCH=${{ github.ref_name }}
 
-      # Imprime um pequeno painel visual de resumo na interface de execução do GitHub Actions
       - name: 📊 Build Summary
         run: |
           echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
@@ -88,33 +86,31 @@ jobs:
     name: 📝 Update GitOps Manifests
     runs-on: ubuntu-latest
     needs: build-and-push-image
+    timeout-minutes: 10
+    permissions:
+      contents: write
     
     steps:
-      # Clona o repositório novamente para que possamos modificar os arquivos Kubernetes
       - name: 📥 Checkout código
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN || github.token }}
       
-      # Baixa o binário oficial do Kustomize e o instala no runner
       - name: 🔧 Setup Kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-          kustomize version
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: "5.4.1"
       
-      # Entra na pasta do serviço e substitui a imagem antiga pela nova tag gerada no build
       - name: 📝 Update image tag in kustomization
         run: |
           cd k8s/microsservices/${{ inputs.nameService }}
 
           echo "🔄 Updating image tag to: ${{ inputs.imageTag }}"
-          kustomize edit set image             ${{ inputs.nameService }}=${{ inputs.imageName }}:${{ inputs.imageTag }}
+          kustomize edit set image ${{ inputs.nameService }}=${{ inputs.imageName }}:${{ inputs.imageTag }}
           
           echo "✅ Kustomization updated"
           cat kustomization.yaml
 
-      # Testa a compilação do Kustomize localmente ANTES de comitar e publicar
       - name: ✅ Validate Kubernetes manifests
         run: |
           echo "🔍 Validating manifests..."
@@ -122,7 +118,6 @@ jobs:
           kustomize build . > /tmp/manifests.yaml
           echo "✅ Manifests are valid"
       
-      # Configura o Git temporário para commitar a mudança no kustomization.yaml e fazer push
       - name: 💾 Commit and push changes
         run: |
           git config user.name "GitHub Actions Bot"

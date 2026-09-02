@@ -1,41 +1,32 @@
-# ==========================================================
-# Multi-stage Build para AIOps Engine (FastAPI + ML + GenAI)
-# ==========================================================
-
-# Estagio 1: Builder
-FROM python:3.14.7-alpine3.24 AS builder
+# =========================================================================
+# Estagio 1: Builder (Instalacao de pacotes FastAPI, ML e GenAI)
+# =========================================================================
+FROM python:3.12.14-alpine3.24 AS builder
 
 WORKDIR /app
 
-# Instala dependencias no ~/.local do usuario sem precisar de compiladores no runtime
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Estagio 2: Runtime de Producao
-FROM python:3.14.7-alpine3.24 AS production
-
-# Cria usuario sem privilegios (rootless para seguranca em Kubernetes)
-RUN adduser -D -s /bin/sh appuser
+# =========================================================================
+# Estagio 2: Runtime Distroless Non-Root (FastAPI + Uvicorn)
+# =========================================================================
+FROM gcr.io/distroless/python3-debian12:nonroot
 
 WORKDIR /app
 
-# Copia os pacotes Python instalados
-COPY --from=builder /root/.local /home/appuser/.local
+# Copia pacotes compilados do builder
+COPY --from=builder /install /usr/local
 
-# Copia o codigo-fonte completo, incluindo modulos core e frontend estatico
-COPY --chown=appuser:appuser . .
+# Copia codigo-fonte completo (core, static, main.py)
+COPY --chown=nonroot:nonroot . .
 
-ENV PATH=/home/appuser/.local/bin:$PATH \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/usr/local/lib/python3.12/site-packages:/usr/local/lib/python3.11/site-packages:/usr/local/lib/python3.12/dist-packages:/usr/local/lib/python3.11/dist-packages \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-USER appuser
+USER nonroot:nonroot
 
 EXPOSE 8000
 
-# Health check nativo via endpoint /health do FastAPI
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
-
-# Executa o servidor ASGI Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/usr/bin/python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

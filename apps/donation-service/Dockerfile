@@ -1,24 +1,22 @@
-FROM golang:1.25-alpine3.21 AS builder
+# Build multi-stage com imagem final distroless e nonroot
+FROM golang:1.25-bookworm AS builder
 
 WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY --exclude=tests/ . .
+COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o donation-service
+# Binario estatico compilado para execucao sem libc e com remocao de simbolos de debug (-w -s)
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/donation-service .
 
-FROM alpine:3.23.3 AS final
-
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Imagem final sem shell nem gerenciador de pacotes (Minimizacao de superficie de ataque e Zero CVEs)
+FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
+COPY --from=builder /app/donation-service /app/donation-service
 
-COPY --from=builder --chown=appuser:appgroup /app/donation-service /app/donation-service
-
-USER appuser
-
+USER nonroot:nonroot
 EXPOSE 8082
-
 ENTRYPOINT ["/app/donation-service"]

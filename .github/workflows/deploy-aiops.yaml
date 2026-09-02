@@ -1,12 +1,12 @@
-name: 🔐 Pipeline — donation-service (Golang)
+name: 🔐 Pipeline — aiops-engine (Python)
 
 on:
   push:
     branches: [main]
-    paths: ["apps/donation-service/**"]
+    paths: ["apps/aiops-engine/**"]
   pull_request:
     branches: [main]
-    paths: ["apps/donation-service/**"]
+    paths: ["apps/aiops-engine/**"]
   workflow_dispatch:
 
 concurrency:
@@ -19,10 +19,10 @@ permissions:
   security-events: write
 
 env:
-  SERVICE: donation-service
-  LANGUAGE: golang
-  GO_VERSION: "1.25"
-  SERVICE_PATH: apps/donation-service
+  SERVICE: aiops-engine
+  LANGUAGE: python
+  PYTHON_VERSION: "3.12.14"
+  SERVICE_PATH: apps/aiops-engine
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -31,9 +31,9 @@ jobs:
     timeout-minutes: 10
     uses: ./.github/workflows/reusable-lint.yaml
     with:
-      language: golang
-      service_path: apps/donation-service
-      go_version: "1.25"
+      language: python
+      service_path: apps/aiops-engine
+      python_version: "3.12.14"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -43,10 +43,10 @@ jobs:
     timeout-minutes: 15
     uses: ./.github/workflows/reusable-sca.yaml
     with:
-      language: golang
-      service_path: apps/donation-service
+      language: python
+      service_path: apps/aiops-engine
       block_on_critical: true
-      go_version: "1.25"
+      python_version: "3.12.14"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -56,10 +56,10 @@ jobs:
     timeout-minutes: 15
     uses: ./.github/workflows/reusable-sast.yaml
     with:
-      language: golang
-      service_path: apps/donation-service
+      language: python
+      service_path: apps/aiops-engine
       block_on_critical: true
-      go_version: "1.25"
+      python_version: "3.12.14"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -69,8 +69,8 @@ jobs:
     timeout-minutes: 15
     uses: ./.github/workflows/reusable-container-scan.yaml
     with:
-      service_path: apps/donation-service
-      image_name: donation-service
+      service_path: apps/aiops-engine
+      image_name: aiops-engine
       image_tag: ${{ github.sha }}
       block_on_critical: true
     secrets:
@@ -86,11 +86,11 @@ jobs:
   #   timeout-minutes: 20
   #   uses: ./.github/workflows/build-push-gitops.yaml
   #   with:
-  #     imageName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-donation-sa/donation-service
+  #     imageName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-aiops-sa/aiops-engine
   #     imageTag: ${{ github.sha }}
-  #     nameService: donation-service
+  #     nameService: aiops-engine
   #     region: southamerica-east1
-  #     service_path: apps/donation-service
+  #     service_path: apps/aiops-engine
   #   secrets:
   #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'ces-igniteprogram' }}
   #     WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}

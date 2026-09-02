@@ -1,30 +1,32 @@
-FROM python:3.14.7-alpine3.24 AS builder
+# =========================================================================
+# Estagio 1: Builder (Instalacao limpa de dependencias em prefixo isolado)
+# =========================================================================
+FROM python:3.12.14-alpine3.24 AS builder
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-FROM python:3.14.7-alpine3.24 AS production
-
-RUN adduser -D -s /bin/sh appuser
-
-RUN apk update && apk upgrade --no-cache
+# =========================================================================
+# Estagio 2: Runtime Distroless Non-Root (SEM SHELL, SEM GERENCIADOR, ZERO CVEs)
+# =========================================================================
+FROM gcr.io/distroless/python3-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=builder /root/.local /home/appuser/.local
-COPY --chown=appuser:appuser app.py app.py
+# Copia pacotes compilados do builder
+COPY --from=builder /install /usr/local
 
-ENV PATH=/home/appuser/.local/bin:$PATH \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Copia codigo da aplicacao
+COPY --chown=nonroot:nonroot app.py .
 
-USER appuser
+ENV PYTHONPATH=/usr/local/lib/python3.12/site-packages:/usr/local/lib/python3.11/site-packages:/usr/local/lib/python3.12/dist-packages:/usr/local/lib/python3.11/dist-packages \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER nonroot:nonroot
 
 EXPOSE 8083
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8083/health')" || exit 1
-
-CMD ["newrelic-admin", "run-program", "opentelemetry-instrument", "gunicorn", "--bind", "0.0.0.0:8083", "app:app"]
+ENTRYPOINT ["/usr/bin/python3", "-m", "gunicorn", "--bind", "0.0.0.0:8083", "app:app"]

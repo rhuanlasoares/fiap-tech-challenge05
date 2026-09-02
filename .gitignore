@@ -62,3 +62,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+# Roteiro interno de apresentação e planejamento (local)
+*README_planejamento*
+README_planejamento.md
+docs/README_planejamento.md\n

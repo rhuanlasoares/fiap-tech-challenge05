@@ -11,7 +11,8 @@ resource "google_compute_managed_ssl_certificate" "default" {
       "solidary-tech.${google_compute_global_address.default.address}.nip.io",
       "grafana.${google_compute_global_address.default.address}.nip.io",
       "argocd.${google_compute_global_address.default.address}.nip.io",
-      "kubecost.${google_compute_global_address.default.address}.nip.io"
+      "kubecost.${google_compute_global_address.default.address}.nip.io",
+      "aiops.${google_compute_global_address.default.address}.nip.io"
     ]
   }
 }
