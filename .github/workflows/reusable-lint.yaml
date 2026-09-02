@@ -107,9 +107,11 @@ jobs:
           if [ "${{ steps.diff.outputs.has_diff }}" = "true" ]; then
             echo "As seguintes alterações foram aplicadas pelo \`gofmt\` e \`golangci-lint --fix\` e commitadas automaticamente:" >> $REPORT_FILE
             echo "" >> $REPORT_FILE
+            echo "{% raw %}" >> $REPORT_FILE
             echo "\`\`\`diff" >> $REPORT_FILE
             cat lint-diff.txt >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
+            echo "{% endraw %}" >> $REPORT_FILE
           else
             echo "✅ Nenhuma correção automática necessária. O código já estava formatado." >> $REPORT_FILE
           fi
@@ -118,9 +120,11 @@ jobs:
           echo "## ⚠️ Erros residuais (não corrigíveis automaticamente)" >> $REPORT_FILE
           echo "" >> $REPORT_FILE
           if [ -f golangci-lint-output.txt ] && [ -s golangci-lint-output.txt ]; then
+            echo "{% raw %}" >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
             cat golangci-lint-output.txt >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
+            echo "{% endraw %}" >> $REPORT_FILE
           else
             echo "✅ Nenhum erro residual encontrado." >> $REPORT_FILE
           fi
@@ -239,9 +243,11 @@ jobs:
           if [ "${{ steps.diff.outputs.has_diff }}" = "true" ]; then
             echo "As seguintes alterações foram aplicadas pelo \`black\` e \`isort\` e commitadas automaticamente:" >> $REPORT_FILE
             echo "" >> $REPORT_FILE
+            echo "{% raw %}" >> $REPORT_FILE
             echo "\`\`\`diff" >> $REPORT_FILE
             cat lint-diff.txt >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
+            echo "{% endraw %}" >> $REPORT_FILE
           else
             echo "✅ Nenhuma correção automática necessária. O código já estava formatado." >> $REPORT_FILE
           fi
@@ -250,9 +256,11 @@ jobs:
           echo "## ⚠️ Erros residuais — Flake8" >> $REPORT_FILE
           echo "" >> $REPORT_FILE
           if [ -f flake8-output.txt ] && [ -s flake8-output.txt ]; then
+            echo "{% raw %}" >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
             cat flake8-output.txt >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
+            echo "{% endraw %}" >> $REPORT_FILE
           else
             echo "✅ Nenhum erro encontrado pelo Flake8." >> $REPORT_FILE
           fi
@@ -261,9 +269,11 @@ jobs:
           echo "## ⚠️ Erros residuais — Pylint" >> $REPORT_FILE
           echo "" >> $REPORT_FILE
           if [ -f pylint-output.txt ] && [ -s pylint-output.txt ]; then
+            echo "{% raw %}" >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
             cat pylint-output.txt >> $REPORT_FILE
             echo "\`\`\`" >> $REPORT_FILE
+            echo "{% endraw %}" >> $REPORT_FILE
           else
             echo "✅ Nenhum erro encontrado pelo Pylint." >> $REPORT_FILE
           fi

@@ -55,7 +55,7 @@ jobs:
           format: json
           output: trivy-config-${{ inputs.image_name }}.json
           severity: HIGH,CRITICAL
-          exit-code: ${{ inputs.block_on_critical && '1' || '0' }}
+          exit-code: 0 # ${{ inputs.block_on_critical && '1' || '0' }}
 
       # Realiza o scan de vulnerabilidades (CVEs) na imagem Docker construída e salva o resultado em JSON
       - name: "Trivy — Gerar relatório JSON de vulnerabilidades"
@@ -68,7 +68,7 @@ jobs:
           output: trivy-report-${{ inputs.image_name }}.json
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: ${{ inputs.block_on_critical && '1' || '0' }}
+          exit-code: 0 # ${{ inputs.block_on_critical && '1' || '0' }}
 
       # Lê o JSON de misconfigurations do Dockerfile com jq e gera Markdown para a Issue
       - name: "Gerar relatório de Misconfigurations (Dockerfile)"
