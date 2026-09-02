@@ -1,8 +1,10 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from core.config import settings
 
 logger = logging.getLogger("aiops.k8s")
+
 
 class K8sClient:
     def __init__(self):
@@ -15,6 +17,7 @@ class K8sClient:
     def _init_client(self):
         try:
             from kubernetes import client, config
+
             try:
                 config.load_incluster_config()
                 logger.info("Loaded in-cluster Kubernetes config")
@@ -33,17 +36,23 @@ class K8sClient:
         events_list = []
         try:
             for ns in namespaces:
-                events = self.core_api.list_namespaced_event(namespace=ns, _request_timeout=5)
+                events = self.core_api.list_namespaced_event(
+                    namespace=ns, _request_timeout=5
+                )
                 for ev in events.items:
                     if ev.type == "Warning":
-                        events_list.append({
-                            "namespace": ns,
-                            "reason": ev.reason,
-                            "message": ev.message,
-                            "involved_object": f"{ev.involved_object.kind}/{ev.involved_object.name}",
-                            "count": ev.count or 1,
-                            "last_timestamp": str(ev.last_timestamp or ev.event_time or "")
-                        })
+                        events_list.append(
+                            {
+                                "namespace": ns,
+                                "reason": ev.reason,
+                                "message": ev.message,
+                                "involved_object": f"{ev.involved_object.kind}/{ev.involved_object.name}",
+                                "count": ev.count or 1,
+                                "last_timestamp": str(
+                                    ev.last_timestamp or ev.event_time or ""
+                                ),
+                            }
+                        )
         except Exception as e:
             logger.debug(f"Error fetching k8s events: {e}")
         return events_list
@@ -54,34 +63,39 @@ class K8sClient:
         pods_summary = []
         try:
             for ns in namespaces:
-                pods = self.core_api.list_namespaced_pod(namespace=ns, _request_timeout=5)
+                pods = self.core_api.list_namespaced_pod(
+                    namespace=ns, _request_timeout=5
+                )
                 for pod in pods.items:
                     restart_count = 0
                     if pod.status.container_statuses:
-                        restart_count = sum(cs.restart_count for cs in pod.status.container_statuses)
-                    
-                    pods_summary.append({
-                        "namespace": ns,
-                        "name": pod.metadata.name,
-                        "phase": pod.status.phase,
-                        "restart_count": restart_count,
-                        "node_name": pod.spec.node_name,
-                        "creation_timestamp": str(pod.metadata.creation_timestamp)
-                    })
+                        restart_count = sum(
+                            cs.restart_count for cs in pod.status.container_statuses
+                        )
+
+                    pods_summary.append(
+                        {
+                            "namespace": ns,
+                            "name": pod.metadata.name,
+                            "phase": pod.status.phase,
+                            "restart_count": restart_count,
+                            "node_name": pod.spec.node_name,
+                            "creation_timestamp": str(pod.metadata.creation_timestamp),
+                        }
+                    )
         except Exception as e:
             logger.debug(f"Error fetching k8s pods: {e}")
         return pods_summary
 
     def rollout_restart_deployment(self, namespace: str, deployment_name: str) -> bool:
         from datetime import datetime, timezone
+
         now = datetime.now(timezone.utc).isoformat()
         body = {
             "spec": {
                 "template": {
                     "metadata": {
-                        "annotations": {
-                            "kubectl.kubernetes.io/restartedAt": now
-                        }
+                        "annotations": {"kubectl.kubernetes.io/restartedAt": now}
                     }
                 }
             }
@@ -97,9 +111,11 @@ class K8sClient:
                     plural="rollouts",
                     name=deployment_name,
                     body=body,
-                    _request_timeout=5
+                    _request_timeout=5,
                 )
-                logger.info(f"Triggered Argo Rollout restart for {namespace}/{deployment_name}")
+                logger.info(
+                    f"Triggered Argo Rollout restart for {namespace}/{deployment_name}"
+                )
                 return True
             except Exception:
                 pass
@@ -111,11 +127,15 @@ class K8sClient:
                     name=deployment_name,
                     namespace=namespace,
                     body=body,
-                    _request_timeout=5
+                    _request_timeout=5,
                 )
-                logger.info(f"Triggered K8s Deployment restart for {namespace}/{deployment_name}")
+                logger.info(
+                    f"Triggered K8s Deployment restart for {namespace}/{deployment_name}"
+                )
                 return True
             except Exception as e:
-                logger.warning(f"Failed to restart deployment/rollout {namespace}/{deployment_name}: {e}")
+                logger.warning(
+                    f"Failed to restart deployment/rollout {namespace}/{deployment_name}: {e}"
+                )
 
         return False
