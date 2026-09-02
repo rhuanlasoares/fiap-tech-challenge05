@@ -1,14 +1,18 @@
 import logging
+from typing import Any, Dict, List
+
 import numpy as np
-from typing import List, Dict, Any
 
 logger = logging.getLogger("aiops.predictor")
+
 
 class AiOpsPredictor:
     def __init__(self):
         pass
 
-    def analyze_memory_leaks(self, mem_metrics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def analyze_memory_leaks(
+        self, mem_metrics: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         risks = []
         for item in mem_metrics:
             values = item.get("values", [])
@@ -36,25 +40,29 @@ class AiOpsPredictor:
                 seconds_to_oom = remaining_bytes / slope
                 minutes_to_oom = round(seconds_to_oom / 60.0, 1)
                 current_pct = round((current_bytes / limit_bytes) * 100, 1)
-                
+
                 if minutes_to_oom < 120:
                     severity = "CRITICAL" if minutes_to_oom < 30 else "WARNING"
-                    risks.append({
-                        "id": f"oom_leak_{item.get('namespace')}_{item.get('pod')}",
-                        "type": "MEMORY_LEAK_PREDICTION",
-                        "severity": severity,
-                        "namespace": item.get("namespace"),
-                        "pod": item.get("pod"),
-                        "container": item.get("container"),
-                        "message": f"Pod {item.get('pod')} approaching OOMKilled! Current: {current_pct}% of limit, growing at {round(slope / 1024, 1)} KB/s.",
-                        "current_usage_mb": round(current_bytes / (1024 * 1024), 1),
-                        "limit_mb": round(limit_bytes / (1024 * 1024), 1),
-                        "estimated_minutes_to_failure": minutes_to_oom,
-                        "recommendation": "Schedule graceful rollout restart or expand memory limit to prevent OOMKilled."
-                    })
+                    risks.append(
+                        {
+                            "id": f"oom_leak_{item.get('namespace')}_{item.get('pod')}",
+                            "type": "MEMORY_LEAK_PREDICTION",
+                            "severity": severity,
+                            "namespace": item.get("namespace"),
+                            "pod": item.get("pod"),
+                            "container": item.get("container"),
+                            "message": f"Pod {item.get('pod')} approaching OOMKilled! Current: {current_pct}% of limit, growing at {round(slope / 1024, 1)} KB/s.",
+                            "current_usage_mb": round(current_bytes / (1024 * 1024), 1),
+                            "limit_mb": round(limit_bytes / (1024 * 1024), 1),
+                            "estimated_minutes_to_failure": minutes_to_oom,
+                            "recommendation": "Schedule graceful rollout restart or expand memory limit to prevent OOMKilled.",
+                        }
+                    )
         return risks
 
-    def analyze_http_anomalies(self, signals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def analyze_http_anomalies(
+        self, signals: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         anomalies = []
         for sig in signals:
             svc = sig.get("service")
@@ -64,30 +72,34 @@ class AiOpsPredictor:
             rps = float(sig.get("req_per_sec", 0.0))
 
             if err_pct > 5.0:
-                anomalies.append({
-                    "id": f"err_spike_{ns}_{svc}",
-                    "type": "HTTP_5XX_ERROR_RATE_ANOMALY",
-                    "severity": "CRITICAL" if err_pct > 25.0 else "WARNING",
-                    "namespace": ns,
-                    "service": svc,
-                    "message": f"Service {svc} has an anomalous error rate of {err_pct}%.",
-                    "current_value": err_pct,
-                    "unit": "%",
-                    "recommendation": "Check database connectivity and pod logs for unhandled exceptions."
-                })
+                anomalies.append(
+                    {
+                        "id": f"err_spike_{ns}_{svc}",
+                        "type": "HTTP_5XX_ERROR_RATE_ANOMALY",
+                        "severity": "CRITICAL" if err_pct > 25.0 else "WARNING",
+                        "namespace": ns,
+                        "service": svc,
+                        "message": f"Service {svc} has an anomalous error rate of {err_pct}%.",
+                        "current_value": err_pct,
+                        "unit": "%",
+                        "recommendation": "Check database connectivity and pod logs for unhandled exceptions.",
+                    }
+                )
 
             if p99_ms > 1000.0:
-                anomalies.append({
-                    "id": f"lat_spike_{ns}_{svc}",
-                    "type": "LATENCY_DEGRADATION_ANOMALY",
-                    "severity": "CRITICAL" if p99_ms > 3000.0 else "WARNING",
-                    "namespace": ns,
-                    "service": svc,
-                    "message": f"Service {svc} latency is unacceptably high (p99={p99_ms}ms).",
-                    "current_value": p99_ms,
-                    "unit": "ms",
-                    "recommendation": "Inspect downstream queries in Cloud SQL or SQS backlog delays."
-                })
+                anomalies.append(
+                    {
+                        "id": f"lat_spike_{ns}_{svc}",
+                        "type": "LATENCY_DEGRADATION_ANOMALY",
+                        "severity": "CRITICAL" if p99_ms > 3000.0 else "WARNING",
+                        "namespace": ns,
+                        "service": svc,
+                        "message": f"Service {svc} latency is unacceptably high (p99={p99_ms}ms).",
+                        "current_value": p99_ms,
+                        "unit": "ms",
+                        "recommendation": "Inspect downstream queries in Cloud SQL or SQS backlog delays.",
+                    }
+                )
         return anomalies
 
     def analyze_storage_risks(self, pvcs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -96,19 +108,23 @@ class AiOpsPredictor:
             hs_full = float(pvc.get("hours_to_full", 999.0))
             used_pct = float(pvc.get("used_pct", 0.0))
             if used_pct > 85.0 or hs_full < 24.0:
-                risks.append({
-                    "id": f"disk_full_{pvc.get('namespace')}_{pvc.get('pvc')}",
-                    "type": "STORAGE_EXHAUSTION_PREDICTION",
-                    "severity": "CRITICAL" if used_pct > 92.0 else "WARNING",
-                    "namespace": pvc.get("namespace"),
-                    "pvc": pvc.get("pvc"),
-                    "message": f"PVC {pvc.get('pvc')} is {used_pct}% full. Projected to exhaust in {hs_full} hours.",
-                    "estimated_hours_to_failure": hs_full,
-                    "recommendation": "Expand PVC capacity via StorageClass or cleanup old logs/data."
-                })
+                risks.append(
+                    {
+                        "id": f"disk_full_{pvc.get('namespace')}_{pvc.get('pvc')}",
+                        "type": "STORAGE_EXHAUSTION_PREDICTION",
+                        "severity": "CRITICAL" if used_pct > 92.0 else "WARNING",
+                        "namespace": pvc.get("namespace"),
+                        "pvc": pvc.get("pvc"),
+                        "message": f"PVC {pvc.get('pvc')} is {used_pct}% full. Projected to exhaust in {hs_full} hours.",
+                        "estimated_hours_to_failure": hs_full,
+                        "recommendation": "Expand PVC capacity via StorageClass or cleanup old logs/data.",
+                    }
+                )
         return risks
 
-    def calculate_cluster_health_score(self, predictions: List[Any], anomalies: List[Any], events: List[Any]) -> int:
+    def calculate_cluster_health_score(
+        self, predictions: List[Any], anomalies: List[Any], events: List[Any]
+    ) -> int:
         score = 100
         for p in predictions:
             if p.get("severity") == "CRITICAL":

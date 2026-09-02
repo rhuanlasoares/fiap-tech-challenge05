@@ -1,10 +1,13 @@
 import logging
-import requests
-from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import requests
+
 from core.config import settings
 
 logger = logging.getLogger("aiops.prometheus")
+
 
 class PrometheusClient:
     def __init__(self, base_url: str = settings.PROMETHEUS_URL):
@@ -18,20 +21,19 @@ class PrometheusClient:
                 data = resp.json()
                 if data.get("status") == "success":
                     return data.get("data", {}).get("result", [])
-            logger.warning(f"Prometheus query failed: {promql} -> Status {resp.status_code}")
+            logger.warning(
+                f"Prometheus query failed: {promql} -> Status {resp.status_code}"
+            )
         except Exception as e:
             logger.debug(f"Error querying Prometheus: {e}")
         return None
 
-    def query_range(self, promql: str, start_ts: int, end_ts: int, step: str = "60s") -> Optional[List[Dict[str, Any]]]:
+    def query_range(
+        self, promql: str, start_ts: int, end_ts: int, step: str = "60s"
+    ) -> Optional[List[Dict[str, Any]]]:
         url = self.base_url + "/api/v1/query_range"
         try:
-            params = {
-                "query": promql,
-                "start": start_ts,
-                "end": end_ts,
-                "step": step
-            }
+            params = {"query": promql, "start": start_ts, "end": end_ts, "step": step}
             resp = requests.get(url, params=params, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
@@ -41,11 +43,13 @@ class PrometheusClient:
             logger.debug(f"Error range querying Prometheus: {e}")
         return None
 
-    def get_container_memory_trends(self, namespaces: List[str], window_minutes: int = 30) -> List[Dict[str, Any]]:
+    def get_container_memory_trends(
+        self, namespaces: List[str], window_minutes: int = 30
+    ) -> List[Dict[str, Any]]:
         now = int(datetime.now(timezone.utc).timestamp())
         start = now - (window_minutes * 60)
         ns_regex = "|".join(namespaces)
-        
+
         mem_query = f'container_memory_working_set_bytes{{namespace=~"{ns_regex}", container!="", container!="POD"}}'
         limit_query = f'container_spec_memory_limit_bytes{{namespace=~"{ns_regex}", container!="", container!="POD"}}'
 
@@ -73,7 +77,7 @@ class PrometheusClient:
                 container = metric.get("container")
                 key = f"{namespace}/{pod}/{container}"
                 values = item.get("values", [])
-                
+
                 if len(values) >= 3:
                     parsed_values = []
                     for ts, val in values:
@@ -81,22 +85,24 @@ class PrometheusClient:
                             parsed_values.append((int(ts), float(val)))
                         except (ValueError, TypeError):
                             pass
-                    
+
                     if parsed_values:
-                        trends.append({
-                            "key": key,
-                            "namespace": namespace,
-                            "pod": pod,
-                            "container": container,
-                            "values": parsed_values,
-                            "limit_bytes": limits_map.get(key, 0.0),
-                            "current_bytes": parsed_values[-1][1]
-                        })
+                        trends.append(
+                            {
+                                "key": key,
+                                "namespace": namespace,
+                                "pod": pod,
+                                "container": container,
+                                "values": parsed_values,
+                                "limit_bytes": limits_map.get(key, 0.0),
+                                "current_bytes": parsed_values[-1][1],
+                            }
+                        )
         return trends
 
     def get_http_golden_signals(self, namespaces: List[str]) -> List[Dict[str, Any]]:
         ns_regex = "|".join(namespaces)
-        
+
         rate_query = f'sum by (namespace, service, job) (rate(http_requests_total{{namespace=~"{ns_regex}"}}[2m]))'
         errors_query = f'sum by (namespace, service, job) (rate(http_requests_total{{namespace=~"{ns_regex}", status=~"5.."}}[2m]))'
         lat95 = f'histogram_quantile(0.95, sum by (le, namespace, service) (rate(http_request_duration_seconds_bucket{{namespace=~"{ns_regex}"}}[5m])))'
@@ -121,7 +127,7 @@ class PrometheusClient:
                 "error_5xx_per_sec": 0.0,
                 "error_rate_pct": 0.0,
                 "p95_latency_ms": 0.0,
-                "p99_latency_ms": 0.0
+                "p99_latency_ms": 0.0,
             }
 
         for e in errors:
@@ -179,7 +185,7 @@ class PrometheusClient:
                     "capacity_bytes": val,
                     "used_bytes": 0.0,
                     "used_pct": 0.0,
-                    "hours_to_full": 999.0
+                    "hours_to_full": 999.0,
                 }
 
         for u in used:
@@ -201,19 +207,38 @@ class PrometheusClient:
             key = f"{ns}/{pvc_name}"
             val = float(p.get("value", [0, 0])[1])
             if key in pvcs and val <= 0:
-                pvcs[key]["hours_to_full"] = round(8.0 * (pvcs[key]["capacity_bytes"] - pvcs[key]["used_bytes"]) / max(1.0, pvcs[key]["capacity_bytes"]), 1)
+                pvcs[key]["hours_to_full"] = round(
+                    8.0
+                    * (pvcs[key]["capacity_bytes"] - pvcs[key]["used_bytes"])
+                    / max(1.0, pvcs[key]["capacity_bytes"]),
+                    1,
+                )
 
         return list(pvcs.values())
 
     def get_node_health_summary(self) -> List[Dict[str, Any]]:
-        node_cpu = self.query("100 - (avg by (instance) (rate(node_cpu_seconds_total{mode='idle'}[2m])) * 100)") or []
-        node_mem = self.query("(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100") or []
+        node_cpu = (
+            self.query(
+                "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode='idle'}[2m])) * 100)"
+            )
+            or []
+        )
+        node_mem = (
+            self.query(
+                "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100"
+            )
+            or []
+        )
 
         nodes = {}
         for c in node_cpu:
             inst = c.get("metric", {}).get("instance", "unknown")
             val = float(c.get("value", [0, 0])[1])
-            nodes[inst] = {"instance": inst, "cpu_usage_pct": round(val, 1), "mem_usage_pct": 0.0}
+            nodes[inst] = {
+                "instance": inst,
+                "cpu_usage_pct": round(val, 1),
+                "mem_usage_pct": 0.0,
+            }
 
         for m in node_mem:
             inst = m.get("metric", {}).get("instance", "unknown")
@@ -221,6 +246,10 @@ class PrometheusClient:
             if inst in nodes:
                 nodes[inst]["mem_usage_pct"] = round(val, 1)
             else:
-                nodes[inst] = {"instance": inst, "cpu_usage_pct": 0.0, "mem_usage_pct": round(val, 1)}
+                nodes[inst] = {
+                    "instance": inst,
+                    "cpu_usage_pct": 0.0,
+                    "mem_usage_pct": round(val, 1),
+                }
 
         return list(nodes.values())
