@@ -399,7 +399,7 @@ jobs:
           # Deixamos exit-code: 0 aqui e controlamos o bloqueio
           # manualmente no próximo step para poder gerar o relatório
           # mesmo quando há findings.
-          exit-code: ${{ inputs.block_on_critical && '1' || '0' }}
+          exit-code: 0 # ${{ inputs.block_on_critical && '1' || '0' }}
 
       # Lê o JSON do Trivy e bloqueia apenas se houver secrets encontrados
       # (todos os secrets do Trivy são classificados como CRITICAL).
