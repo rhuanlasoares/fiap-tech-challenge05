@@ -22,7 +22,7 @@ permissions:
 env:
   SERVICE: donation-service
   LANGUAGE: golang
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26"
   SERVICE_PATH: apps/donation-service
   IMAGE_TAG: ${{ github.sha }}
 
@@ -33,7 +33,7 @@ jobs:
     with:
       language: golang
       service_path: apps/donation-service
-      go_version: "1.25"
+      go_version: "1.26"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -46,7 +46,7 @@ jobs:
       language: golang
       service_path: apps/donation-service
       block_on_critical: true
-      go_version: "1.25"
+      go_version: "1.26"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -59,7 +59,7 @@ jobs:
       language: golang
       service_path: apps/donation-service
       block_on_critical: true
-      go_version: "1.25"
+      go_version: "1.26"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
