@@ -1,0 +1,21 @@
+./app.py:50:5: F821 undefined name 'time'
+************* Module app
+app.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+app.py:15:7: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:16:4: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:35:7: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:36:4: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:42:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:48:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:50:4: E0602: Undefined variable 'time' (undefined-variable)
+app.py:56:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:74:11: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:76:8: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:84:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:90:11: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:91:8: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:98:15: W1508: os.getenv default type is builtins.int. Expected str or None. (invalid-envvar-default)
+
+-----------------------------------
+Your code has been rated at 6.98/10
+
