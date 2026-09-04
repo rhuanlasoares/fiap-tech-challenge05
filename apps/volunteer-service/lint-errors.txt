@@ -1,0 +1,21 @@
+************* Module app
+app.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+app.py:15:7: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:16:4: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:44:7: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:43:4: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:45:4: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:51:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:57:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:65:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:84:11: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:85:8: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:91:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:99:11: W0718: Catching too general exception Exception (broad-exception-caught)
+app.py:100:8: W1203: Use lazy % formatting in logging functions (logging-fstring-interpolation)
+app.py:106:0: C0116: Missing function or method docstring (missing-function-docstring)
+app.py:111:15: W1508: os.getenv default type is builtins.int. Expected str or None. (invalid-envvar-default)
+
+-----------------------------------
+Your code has been rated at 7.38/10
+
