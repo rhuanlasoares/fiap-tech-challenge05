@@ -34,6 +34,7 @@ class AasReasoner:
                 logger.info(f"Available Gemini models for key: {available_models}")
 
                 preferred_models = [
+                    "gemini-3.6-flash-lite",
                     "gemini-3.6-flash",
                     "gemini-3.5-flash-lite",
                     "gemini-3-flash-preview",
@@ -91,6 +92,7 @@ class AasReasoner:
 
         candidates = [
             self.model_name,
+            "gemini-3.6-flash-lite",
             "gemini-3.6-flash",
             "gemini-3.5-flash-lite",
             "gemini-3-flash-preview",

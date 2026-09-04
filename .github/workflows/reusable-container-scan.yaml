@@ -23,6 +23,8 @@ on:
     secrets:
       TOKEN:
         required: true
+      GEMINI_API_KEY:
+        required: false
 
 jobs:
   container-scan:
@@ -70,138 +72,30 @@ jobs:
           ignore-unfixed: true
           exit-code: 0 # ${{ inputs.block_on_critical && '1' || '0' }}
 
-      # Lê o JSON de misconfigurations do Dockerfile com jq e gera Markdown para a Issue
-      - name: "Gerar relatório de Misconfigurations (Dockerfile)"
+      # Analisa misconfigurations do Dockerfile com Gemini AI e cria Issue apenas se houver problemas
+      - name: AI Triage & Issue — Trivy Dockerfile Misconfigurations
         if: always()
-        run: |
-          CONFIG_FILE="trivy-config-${{ inputs.image_name }}.json"
-          REPORT_FILE="issue-config.md"
+        uses: ./.github/actions/ai-issue-analyzer
+        with:
+          scan-type: container
+          tool-name: "Trivy Misconfigurations"
+          report-file: "trivy-config-${{ inputs.image_name }}.json"
+          service-name: "${{ inputs.image_name }}"
+          service-path: "${{ inputs.service_path }}"
+          gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
+          github-token: "${{ secrets.TOKEN }}"
+          output-file: "issue-config.md"
 
-          echo "---" > $REPORT_FILE
-          echo "title: '[Container] Trivy Config — Misconfigurations em ${{ inputs.image_name }}'" >> $REPORT_FILE
-          echo "labels: [security, trivy, container, misconfiguration]" >> $REPORT_FILE
-          echo "---" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "# 🔧 Trivy — Misconfigurations no Dockerfile" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "**Imagem:** \`${{ inputs.image_name }}:${{ inputs.image_tag }}\`" >> $REPORT_FILE
-          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
-          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
-          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-
-          # Captura segura do JQ
-          CONF_COUNT=$(jq '[.Results[]?.Misconfigurations[]?] | length' "$CONFIG_FILE" 2>/dev/null || echo "0")
-
-          if [ ! -f "$CONFIG_FILE" ] || [ "$CONF_COUNT" -eq 0 ]; then
-            echo "✅ Nenhuma misconfiguration encontrada no Dockerfile." >> $REPORT_FILE
-          else
-            echo "**Total de misconfigurations encontradas:** $CONF_COUNT" >> $REPORT_FILE
-            echo "" >> $REPORT_FILE
-            
-            if [ "$CONF_COUNT" -gt 30 ]; then
-              echo "⚠️ _Nota: Devido ao limite do GitHub, apenas as 30 primeiras entradas estão detalhadas abaixo. Consulte o log do pipeline para a lista completa._" >> $REPORT_FILE
-              echo "" >> $REPORT_FILE
-            fi
-
-            # Bloco JQ limitando a 30 itens para não estourar o limite da Issue
-            jq -r '
-              [
-                .Results[]? | select(.Misconfigurations != null) |
-                .Target as $target |
-                .Misconfigurations[]? |
-                {target: $target, conf: .}
-              ] | .[0:30][] |
-              "### 🔸 \(.conf.ID) — \(.conf.Title)\n- **Alvo:** \(.target)\n- **Severidade:** \(.conf.Severity)\n- **Tipo:** \(.conf.Type)\n- **Descrição:** \(.conf.Description // "Sem descrição.")\n- **Resolução:** \(.conf.Resolution // "N/A")\n- **Mais info:** \(.conf.PrimaryURL // "N/A")\n"
-            ' "$CONFIG_FILE" >> $REPORT_FILE || true
-          fi
-
-          echo "---" >> $REPORT_FILE
-          echo "_Relatório gerado automaticamente pelo Container Scan pipeline._" >> $REPORT_FILE
-
-      # Lê o JSON de vulnerabilidades da imagem com jq e gera Markdown para a Issue
-      - name: "Gerar relatório de Vulnerabilidades (Imagem)"
+      # Analisa vulnerabilidades da imagem com Gemini AI e cria Issue apenas se houver falhas
+      - name: AI Triage & Issue — Trivy Image Vulnerabilities
         if: always()
-        run: |
-          REPORT_JSON="trivy-report-${{ inputs.image_name }}.json"
-          REPORT_FILE="issue-image.md"
-
-          echo "---" > $REPORT_FILE
-          echo "title: '[Container] Trivy Image — Vulnerabilidades em ${{ inputs.image_name }}'" >> $REPORT_FILE
-          echo "labels: [security, trivy, container, vulnerability]" >> $REPORT_FILE
-          echo "---" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "# 🚨 Trivy — Vulnerabilidades na Imagem Docker" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "**Imagem:** \`${{ inputs.image_name }}:${{ inputs.image_tag }}\`" >> $REPORT_FILE
-          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
-          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
-          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-
-          # Captura segura do JQ
-          VULN_COUNT=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$REPORT_JSON" 2>/dev/null || echo "0")
-
-          if [ ! -f "$REPORT_JSON" ] || [ "$VULN_COUNT" -eq 0 ]; then
-            echo "✅ Nenhuma vulnerabilidade encontrada na imagem." >> $REPORT_FILE
-          else
-            echo "**Total de vulnerabilidades encontradas:** $VULN_COUNT" >> $REPORT_FILE
-            echo "" >> $REPORT_FILE
-
-            if [ "$VULN_COUNT" -gt 30 ]; then
-              echo "⚠️ _Nota: Devido ao limite do GitHub, apenas as 30 primeiras entradas estão detalhadas abaixo. Consulte o log do pipeline para a lista completa._" >> $REPORT_FILE
-              echo "" >> $REPORT_FILE
-            fi
-
-            # Bloco JQ limitando a 30 itens para não estourar o limite da Issue (65536 chars)
-            jq -r '
-              [
-                .Results[]? | select(.Vulnerabilities != null) |
-                .Target as $target |
-                .Vulnerabilities[]? |
-                {target: $target, vuln: .}
-              ] | .[0:30][] |
-              "### 🔸 \(.vuln.VulnerabilityID) — \(.vuln.PkgName)\n- **Alvo:** \(.target)\n- **Severidade:** \(.vuln.Severity)\n- **Versão instalada:** \(.vuln.InstalledVersion)\n- **Versão corrigida:** \(.vuln.FixedVersion // "N/A")\n- **Título:** \(.vuln.Title // "N/A")\n- **Descrição:** \(.vuln.Description // "Sem descrição.")\n- **Mais info:** \(.vuln.PrimaryURL // "N/A")\n"
-            ' "$REPORT_JSON" >> $REPORT_FILE || true
-          fi
-
-          echo "---" >> $REPORT_FILE
-          echo "_Relatório gerado automaticamente pelo Container Scan pipeline._" >> $REPORT_FILE
-
-      # Cria ou atualiza a Issue de misconfigurations do Dockerfile
-      - name: "Create or Update Issue — Misconfigurations (Dockerfile)"
-        timeout-minutes: 5
-        uses: JasonEtco/create-an-issue@v2.9.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        uses: ./.github/actions/ai-issue-analyzer
         with:
-          filename: issue-config.md
-          update_existing: true
-          search_existing: all
-      # - name: "Create or Update Issue — Misconfigurations (Dockerfile)"
-      #   if: always()
-      #   uses: peter-evans/create-issue-from-file@v5
-      #   with:
-      #     title: '[Container] Trivy Config — Misconfigurations em ${{ inputs.image_name }}'
-      #     content-filepath: issue-config.md
-      #     labels: security, trivy, container, misconfiguration
-      #     token: ${{ secrets.TOKEN }}
-
-      # Cria ou atualiza a Issue de vulnerabilidades da imagem Docker
-      - name: "Create or Update Issue — Vulnerabilidades (Imagem)"
-        timeout-minutes: 5
-        uses: JasonEtco/create-an-issue@v2.9.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        with:
-          filename: issue-image.md
-          update_existing: true
-          search_existing: all
-      # - name: "Create or Update Issue — Vulnerabilidades (Imagem)"
-      #   if: always()
-      #   uses: peter-evans/create-issue-from-file@v5
-      #   with:
-      #     title: '[Container] Trivy Image — Vulnerabilidades em ${{ inputs.image_name }}'
-      #     content-filepath: issue-image.md
-      #     labels: security, trivy, container, vulnerability
-      #     token: ${{ secrets.TOKEN }}
+          scan-type: container
+          tool-name: "Trivy Image Scan"
+          report-file: "trivy-report-${{ inputs.image_name }}.json"
+          service-name: "${{ inputs.image_name }}"
+          service-path: "${{ inputs.service_path }}"
+          gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
+          github-token: "${{ secrets.TOKEN }}"
+          output-file: "issue-image.md"

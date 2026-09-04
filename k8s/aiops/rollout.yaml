@@ -32,11 +32,9 @@ spec:
         imagePullPolicy: Always
         lifecycle:
           preStop:
-            exec:
-              command:
-              - /bin/sh
-              - -c
-              - sleep 5
+            httpGet:
+              path: /pre-stop
+              port: 8000
         startupProbe:
           httpGet:
             path: /health
@@ -93,7 +91,7 @@ spec:
               name: api-keys
               key: SLACK_WEBHOOK_URL
         - name: GEMINI_MODEL
-          value: gemini-3.5-flash-lite
+          value: gemini-3.6-flash-lite
         - name: GEMINI_API_KEY
           valueFrom:
             secretKeyRef:

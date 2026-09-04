@@ -36,6 +36,7 @@ jobs:
       go_version: "1.25"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
   sca:
     name: 📦 SCA
@@ -48,6 +49,7 @@ jobs:
       go_version: "1.25"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
   sast:
     name: 🔒 SAST
@@ -60,6 +62,7 @@ jobs:
       go_version: "1.25"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
   container-scan:
     name: 🐳 Container Scan & Local Build
@@ -72,6 +75,7 @@ jobs:
       block_on_critical: true
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
   # build-push-gitops:
   #   name: 🚀 Build, Push and Update GitOps Manifests

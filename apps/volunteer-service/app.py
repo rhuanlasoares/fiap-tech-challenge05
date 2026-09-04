@@ -52,6 +52,14 @@ def health():
     return jsonify({"status": "ok", "service": "volunteer-service"})
 
 
+@app.route("/volunteer-service/pre-stop", methods=["GET"])
+@app.route("/pre-stop", methods=["GET"])
+def pre_stop():
+    log.info("Kubernetes preStop hook recebido. Drenando conexoes por 10s...")
+    time.sleep(10)
+    return jsonify({"status": "drained", "service": "volunteer-service"}), 200
+
+
 @app.route("/volunteers", methods=["POST"])
 @app.route("/volunteer-service/volunteers", methods=["POST"])
 def register_volunteer():

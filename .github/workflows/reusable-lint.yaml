@@ -20,6 +20,8 @@ on:
     secrets:
       TOKEN:
         required: true
+      GEMINI_API_KEY:
+        required: false
 
 jobs:
   lint-go:
@@ -82,67 +84,20 @@ jobs:
         
           git status
 
-      # Gera o Markdown da Issue com o resumo das correções e erros residuais do GolangCI
-      - name: Gerar relatório de Lint (Go)
+      # Analisa o relatório com Gemini AI e cria Issue apenas se houver correções ou erros relevantes
+      - name: AI Triage & Issue — Lint (Go)
         if: always()
-        run: |
-          REPORT_FILE="issue-lint-go.md"
-
-          echo "---" > $REPORT_FILE
-          echo "title: '[Lint][Go] Correções automáticas em ${{ inputs.service_path }}'" >> $REPORT_FILE
-          echo "labels: [lint, go, code-quality]" >> $REPORT_FILE
-          echo "---" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "# 🧹 Lint — Correções Automáticas (Go)" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
-          echo "**Branch:** \`${{ github.ref_name }}\`" >> $REPORT_FILE
-          echo "**Commit:** \`${{ github.sha }}\`" >> $REPORT_FILE
-          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
-          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-
-          echo "## 📝 Arquivos corrigidos automaticamente" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          if [ "${{ steps.diff.outputs.has_diff }}" = "true" ]; then
-            echo "As seguintes alterações foram aplicadas pelo \`gofmt\` e \`golangci-lint --fix\` e commitadas automaticamente:" >> $REPORT_FILE
-            echo "" >> $REPORT_FILE
-            echo "{% raw %}" >> $REPORT_FILE
-            echo "\`\`\`diff" >> $REPORT_FILE
-            cat lint-diff.txt >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            echo "{% endraw %}" >> $REPORT_FILE
-          else
-            echo "✅ Nenhuma correção automática necessária. O código já estava formatado." >> $REPORT_FILE
-          fi
-
-          echo "" >> $REPORT_FILE
-          echo "## ⚠️ Erros residuais (não corrigíveis automaticamente)" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          if [ -f golangci-lint-output.txt ] && [ -s golangci-lint-output.txt ]; then
-            echo "{% raw %}" >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            cat golangci-lint-output.txt >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            echo "{% endraw %}" >> $REPORT_FILE
-          else
-            echo "✅ Nenhum erro residual encontrado." >> $REPORT_FILE
-          fi
-
-          echo "" >> $REPORT_FILE
-          echo "---" >> $REPORT_FILE
-          echo "_Relatório gerado automaticamente pelo Lint pipeline._" >> $REPORT_FILE
-          
-      - name: Create or Update Issue — Lint (Go)
-        timeout-minutes: 5
-        uses: JasonEtco/create-an-issue@v2.9.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        uses: ./.github/actions/ai-issue-analyzer
         with:
-          filename: issue-lint-go.md
-          update_existing: true
-          search_existing: all
-
+          scan-type: lint
+          tool-name: "Lint Go"
+          report-file: "golangci-lint-output.txt"
+          diff-file: "lint-diff.txt"
+          service-name: "${{ inputs.service_path }}"
+          service-path: "${{ inputs.service_path }}"
+          gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
+          github-token: "${{ secrets.TOKEN }}"
+          output-file: "issue-lint-go.md"
       # Cria ou atualiza a Issue com o resumo das correções de lint do Go
       # - name: Create or Update Issue — Lint (Go)
       #   if: always()
@@ -185,11 +140,12 @@ jobs:
           isort .
 
       # Executa a validação de estilo e qualidade, ignorando erros que travariam o pipeline (|| true)
-      - name: Lint validation (opcional)
+      - name: Lint validation
         working-directory: ${{ inputs.service_path }}
         run: |
-          flake8 . --max-line-length=120 || true
-          pylint **/*.py || true
+          flake8 . --max-line-length=120 > flake8-output.txt 2>&1 || true
+          pylint **/*.py > pylint-output.txt 2>&1 || true
+          cat flake8-output.txt pylint-output.txt > lint-errors.txt || true
       
       # Captura o diff gerado pelas correções automáticas antes do commit
       - name: Capturar diff das correções
@@ -218,81 +174,20 @@ jobs:
         
           git status
 
-      # Gera o Markdown da Issue com diff das correções e erros residuais do flake8 e pylint
-      - name: Gerar relatório de Lint (Python)
+      # Analisa o relatório com Gemini AI e cria Issue apenas se houver correções ou erros relevantes
+      - name: AI Triage & Issue — Lint (Python)
         if: always()
-        run: |
-          REPORT_FILE="issue-lint-python.md"
-
-          echo "---" > $REPORT_FILE
-          echo "title: '[Lint][Python] Correções automáticas em ${{ inputs.service_path }}'" >> $REPORT_FILE
-          echo "labels: [lint, python, code-quality]" >> $REPORT_FILE
-          echo "---" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "# 🧹 Lint — Correções Automáticas (Python)" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          echo "**Serviço:** \`${{ inputs.service_path }}\`" >> $REPORT_FILE
-          echo "**Branch:** \`${{ github.ref_name }}\`" >> $REPORT_FILE
-          echo "**Commit:** \`${{ github.sha }}\`" >> $REPORT_FILE
-          echo "**Horario:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $REPORT_FILE
-          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-
-          echo "## 📝 Arquivos corrigidos automaticamente" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          if [ "${{ steps.diff.outputs.has_diff }}" = "true" ]; then
-            echo "As seguintes alterações foram aplicadas pelo \`black\` e \`isort\` e commitadas automaticamente:" >> $REPORT_FILE
-            echo "" >> $REPORT_FILE
-            echo "{% raw %}" >> $REPORT_FILE
-            echo "\`\`\`diff" >> $REPORT_FILE
-            cat lint-diff.txt >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            echo "{% endraw %}" >> $REPORT_FILE
-          else
-            echo "✅ Nenhuma correção automática necessária. O código já estava formatado." >> $REPORT_FILE
-          fi
-
-          echo "" >> $REPORT_FILE
-          echo "## ⚠️ Erros residuais — Flake8" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          if [ -f flake8-output.txt ] && [ -s flake8-output.txt ]; then
-            echo "{% raw %}" >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            cat flake8-output.txt >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            echo "{% endraw %}" >> $REPORT_FILE
-          else
-            echo "✅ Nenhum erro encontrado pelo Flake8." >> $REPORT_FILE
-          fi
-
-          echo "" >> $REPORT_FILE
-          echo "## ⚠️ Erros residuais — Pylint" >> $REPORT_FILE
-          echo "" >> $REPORT_FILE
-          if [ -f pylint-output.txt ] && [ -s pylint-output.txt ]; then
-            echo "{% raw %}" >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            cat pylint-output.txt >> $REPORT_FILE
-            echo "\`\`\`" >> $REPORT_FILE
-            echo "{% endraw %}" >> $REPORT_FILE
-          else
-            echo "✅ Nenhum erro encontrado pelo Pylint." >> $REPORT_FILE
-          fi
-
-          echo "" >> $REPORT_FILE
-          echo "---" >> $REPORT_FILE
-          echo "_Relatório gerado automaticamente pelo Lint pipeline._" >> $REPORT_FILE
-
-      # Cria ou atualiza a Issue com o resumo das correções de lint do Python
-      - name: Create or Update Issue — Lint (Python)
-        timeout-minutes: 5
-        uses: JasonEtco/create-an-issue@v2.9.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        uses: ./.github/actions/ai-issue-analyzer
         with:
-          filename: issue-lint-python.md
-          update_existing: true
-          search_existing: all
-
+          scan-type: lint
+          tool-name: "Lint Python"
+          report-file: "${{ inputs.service_path }}/lint-errors.txt"
+          diff-file: "lint-diff.txt"
+          service-name: "${{ inputs.service_path }}"
+          service-path: "${{ inputs.service_path }}"
+          gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
+          github-token: "${{ secrets.TOKEN }}"
+          output-file: "issue-lint-python.md"
       # - name: Create or Update Issue — Lint (Python)
       #   if: always()
       #   uses: peter-evans/create-issue-from-file@v5

@@ -163,6 +163,13 @@ def health_check():
     }
 
 
+@app.get("/pre-stop")
+def pre_stop():
+    logger.info("Kubernetes preStop hook recebido. Drenando conexoes por 5s...")
+    time.sleep(5)
+    return {"status": "drained", "service": "aiops-engine"}
+
+
 @app.get("/api/status")
 def get_status():
     return state

@@ -61,11 +61,9 @@ spec:
         imagePullPolicy: Always
         lifecycle:
           preStop:
-            exec:
-              command:
-              - /bin/sh
-              - -c
-              - sleep 10
+            httpGet:
+              path: /pre-stop
+              port: 8081
         startupProbe:
           httpGet:
             path: /health

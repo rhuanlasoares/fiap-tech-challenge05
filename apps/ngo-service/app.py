@@ -43,6 +43,14 @@ def health():
     return jsonify({"status": "ok", "service": "ngo-service"})
 
 
+@app.route("/ngo-service/pre-stop", methods=["GET"])
+@app.route("/pre-stop", methods=["GET"])
+def pre_stop():
+    log.info("Kubernetes preStop hook recebido. Drenando conexoes por 10s...")
+    time.sleep(10)
+    return jsonify({"status": "drained", "service": "ngo-service"}), 200
+
+
 @app.route("/ngo-service/ngos", methods=["POST"])
 @app.route("/ngos", methods=["POST"])
 def create_ngo():

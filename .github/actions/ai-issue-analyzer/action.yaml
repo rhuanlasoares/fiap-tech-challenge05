@@ -1,0 +1,77 @@
+name: 'AI Issue Analyzer with Gemini'
+description: 'Analisa relatórios de segurança e lint com Google AI Studio (Gemini) e cria issues acionáveis somente quando necessário.'
+inputs:
+  scan-type:
+    description: 'Tipo de scan: lint, sca, sast, container'
+    required: true
+  tool-name:
+    description: 'Nome da ferramenta (ex: Trivy, Gosec, Lint Go)'
+    required: true
+  report-file:
+    description: 'Arquivo de relatório (JSON, SARIF, log ou diff)'
+    required: false
+    default: ''
+  diff-file:
+    description: 'Arquivo diff (específico para Lint)'
+    required: false
+    default: ''
+  service-name:
+    description: 'Nome do serviço (ex: donation-service)'
+    required: true
+  service-path:
+    description: 'Caminho do serviço (ex: apps/donation-service)'
+    required: false
+    default: ''
+  gemini-api-key:
+    description: 'Chave de API do Google AI Studio'
+    required: false
+    default: ''
+  github-token:
+    description: 'Token do GitHub com permissão issues: write'
+    required: true
+  output-file:
+    description: 'Arquivo Markdown gerado para a Issue'
+    required: false
+    default: 'issue-ai.md'
+  model:
+    description: 'Modelo Gemini a ser utilizado'
+    required: false
+    default: 'gemini-3.6-flash-lite'
+
+outputs:
+  create-issue:
+    description: 'Indica se uma Issue deve ser criada (true ou false)'
+    value: ${{ steps.analyze.outputs.create_issue }}
+  issue-file:
+    description: 'Caminho do arquivo Markdown gerado'
+    value: ${{ steps.analyze.outputs.issue_file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Executar Análise com IA (Gemini)'
+      id: analyze
+      shell: bash
+      env:
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        python3 "${{ github.action_path }}/analyze.py" \
+          --scan-type "${{ inputs.scan-type }}" \
+          --tool-name "${{ inputs.tool-name }}" \
+          --report-file "${{ inputs.report-file }}" \
+          --diff-file "${{ inputs.diff-file }}" \
+          --service-name "${{ inputs.service-name }}" \
+          --service-path "${{ inputs.service-path }}" \
+          --output-file "${{ inputs.output-file }}" \
+          --model "${{ inputs.model }}"
+
+    - name: 'Criar ou Atualizar Issue no GitHub'
+      if: steps.analyze.outputs.create_issue == 'true'
+      uses: JasonEtco/create-an-issue@v2.9.1
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      with:
+        filename: ${{ inputs.output-file }}
+        update_existing: true
+        search_existing: all
