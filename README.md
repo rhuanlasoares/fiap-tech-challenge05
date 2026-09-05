@@ -106,7 +106,7 @@ Para suportar essa demanda crítica sem comprometer a viabilidade financeira da 
 ### 1. 🏗️ Fundação DevOps & DevSecOps
 - **Imagens OCI Otimizadas**: Multi-stage builds com imagens base mínimas (`alpine` / `distroless`), usuários não-root (`USER nonroot`) e `.dockerignore` rigoroso.
 - **Infraestrutura como Código**: 100% dos recursos provisionados via Terraform modular (VPC com PSA, GKE Spot Node Pools, Cloud SQL, AWS SQS, Secret Manager, Cloud NAT e IAM).
-- **Pipelines CI/CD com Segurança**: GitHub Actions modulares executando **SAST**, **SCA**, **Trivy Container Scan**, linting automatizado e autenticação sem chaves de longa vida via **Workload Identity Federation (WIF / OIDC)**.
+- **Pipelines CI/CD com DevSecOps & IA**: GitHub Actions modulares com **SAST (Gosec/Bandit/Trivy Secrets)**, **SCA (Trivy/OWASP)**, **Container Scan**, linting automatizado com auto-fix e **Triagem Inteligente de Issues com Google Gemini (Google AI Studio)** — filtrando falsos positivos, gerando planos de remediação automáticos e auto-resolvendo issues fechadas. Autenticação federada sem chaves via **Workload Identity Federation (WIF / OIDC)**.
 - **GitOps com Argo CD & Rollouts**: Deploy contínuo automatizado com **Canary Releases** progressivos e análise automática de métricas para auto-rollback em caso de falha.
 
 ---
@@ -173,7 +173,7 @@ Todos os relatórios executivos, planos de continuidade, guias SRE e documentaç
 | **☸️ Kubernetes & GitOps** | [**`docs/README_k8s.md`**](./docs/README_k8s.md) | Gateway API, ArgoCD, Argo Rollouts, KEDA e RBAC. |
 | **💻 Microsserviços da Aplicação** | [**`docs/README_apps.md`**](./docs/README_apps.md) | Arquitetura de software, endpoints REST e variáveis dos serviços. |
 | **🧠 AIOps Predictive Engine** | [**`docs/README_aiops.md`**](./docs/README_aiops.md) | Arquitetura do motor preditivo, integração com Gemini e simulações de caos. |
-| **🤖 CI/CD & DevSecOps** | [**`docs/README_github.md`**](./docs/README_github.md) | Workflows do GitHub Actions, SAST, SCA, Trivy e autenticação WIF/OIDC. |
+| **🤖 CI/CD & DevSecOps** | [**`docs/README_github.md`**](./docs/README_github.md) | Workflows do GitHub Actions, SAST, SCA, Trivy, Triagem Inteligente com Gemini e WIF/OIDC. |
 | **📜 Automação & Testes** | [**`docs/README_scripts.md`**](./docs/README_scripts.md) | Scripts de bootstrap, validação de rotas e simulações de Disaster Recovery. |
 
 ---
