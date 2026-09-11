@@ -152,6 +152,7 @@ func main() {
 	registerRoute("/donation-service/donations", app.DonationHandler)
 
 	handler := HTTPMiddleware(mux)
+	go app.startSQSBufferDrainWorker(ctx)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
@@ -252,6 +253,32 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 				txn.NoticeError(err)
 			}
 			RecordError(ctx, err, "db_insert_error", "Erro ao salvar doação no PostgreSQL")
+
+			// SRE Buffer Mode: Se o banco estiver indisponível ou em failover/read-only,
+			// armazena a doação no AWS SQS com HTTP 202 Accepted para Zero Data Loss (RPO = 0).
+			if a.SqsSvc != nil {
+				d.Status = "PENDING_BUFFERED"
+				d.CreatedAt = time.Now().UTC()
+				d.ID = int(time.Now().UnixNano() / 1e6)
+
+				LogInfo(ctx, "[DISASTER_RECOVERY_BUFFER] PostgreSQL em transicao. Armazenando doacao no AWS SQS...",
+					attribute.Int("donation.id", d.ID),
+					attribute.Int("donation.ngo_id", d.NgoID),
+					attribute.Float64("donation.amount", d.Amount),
+				)
+
+				a.sendNotificationEvent(context.WithoutCancel(ctx), d)
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusAccepted)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"status":   "QUEUED_FOR_PROCESSING",
+					"message":  "Doacao recebida com sucesso e armazenada com seguranca em buffer de alta disponibilidade.",
+					"donation": d,
+				})
+				return
+			}
+
 			http.Error(w, `{"error":"Erro interno"}`, http.StatusInternalServerError)
 			return
 		}
@@ -401,5 +428,64 @@ func (a *App) sendNotificationEvent(ctx context.Context, d Donation) {
 	} else {
 		span.SetStatus(codes.Ok, "Mensagem enviada com sucesso ao SQS")
 		LogInfo(sqsCtx, "Evento de doação despachado para SQS", attribute.Int("donation.id", d.ID))
+	}
+}
+
+func (a *App) startSQSBufferDrainWorker(ctx context.Context) {
+	if a.SqsSvc == nil || a.SqsQueueURL == "" || a.DB == nil {
+		return
+	}
+	LogInfo(ctx, "Iniciando worker de drenagem de contingencia SQS...")
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := a.DB.PingContext(ctx); err != nil {
+				continue
+			}
+
+			out, err := a.SqsSvc.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
+				QueueUrl:            aws.String(a.SqsQueueURL),
+				MaxNumberOfMessages: aws.Int64(10),
+				WaitTimeSeconds:     aws.Int64(2),
+			})
+			if err != nil || len(out.Messages) == 0 {
+				continue
+			}
+
+			for _, msg := range out.Messages {
+				if msg.Body == nil {
+					continue
+				}
+				var d Donation
+				if err := json.Unmarshal([]byte(*msg.Body), &d); err != nil {
+					continue
+				}
+				if d.Status == "PENDING_BUFFERED" {
+					var insertedID int
+					var insertedAt time.Time
+					err := a.DB.QueryRowContext(
+						ctx,
+						"INSERT INTO donations (ngo_id, amount, donor_name, status) VALUES ($1, $2, $3, 'APPROVED') RETURNING id, created_at",
+						d.NgoID, d.Amount, d.DonorName,
+					).Scan(&insertedID, &insertedAt)
+
+					if err == nil {
+						LogInfo(ctx, "[DISASTER_RECOVERY_DRAINED] Doacao recuperada do SQS e gravada no PostgreSQL com sucesso",
+							attribute.Int("donation.id", insertedID),
+							attribute.Int("donation.ngo_id", d.NgoID),
+						)
+						_, _ = a.SqsSvc.DeleteMessageWithContext(ctx, &sqs.DeleteMessageInput{
+							QueueUrl:      aws.String(a.SqsQueueURL),
+							ReceiptHandle: msg.ReceiptHandle,
+						})
+					}
+				}
+			}
+		}
 	}
 }

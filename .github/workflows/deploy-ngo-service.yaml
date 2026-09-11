@@ -87,13 +87,13 @@ jobs:
   #   timeout-minutes: 20
   #   uses: ./.github/workflows/build-push-gitops.yaml
   #   with:
-  #     imageName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-ngo-sa/ngo-service
+  #     imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-ngo-sa/ngo-service
   #     imageTag: ${{ github.sha }}
   #     nameService: ngo-service
   #     region: southamerica-east1
   #     service_path: apps/ngo-service
   #   secrets:
-  #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'ces-igniteprogram' }}
+  #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}
   #     WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
   #     SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
   #     TOKEN: ${{ secrets.GITHUB_TOKEN }}

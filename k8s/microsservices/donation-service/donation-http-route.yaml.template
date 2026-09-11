@@ -8,6 +8,7 @@ spec:
   parentRefs:
   - name: gateway-applications
     namespace: gateway-api-ns
+    sectionName: https
   hostnames:
   - "solidary-tech.${GATEWAY_IP}.nip.io"
   rules:

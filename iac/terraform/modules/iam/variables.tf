@@ -18,7 +18,7 @@ variable "subnets" {
     range_name_services    = string
     ip_cidr_range_services = string
   }))
-  description = "Map of subnet configurations to create in the VPC."
+  description = "Map of subnet configurations to create in the VOC."
 }
 
 variable "sa_gke_member" {

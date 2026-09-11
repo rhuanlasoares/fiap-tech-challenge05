@@ -45,11 +45,11 @@ Esta pasta contém todos os manifests e especificações declarativas para o eco
 
 | Diretório | Responsabilidade |
 | :--- | :--- |
-| **`gateway-api/`** | Definição da Gateway e HTTPRoutes para L7 routing avançado e health checks no GCP Load Balancer. |
+| **`gateway-api/`** | Definição da Gateway (com listeners HTTP:80 e HTTPS:443) e HTTPRoute de redirecionamento automático 301 (HTTP -> HTTPS) via `RequestRedirect` filter no GCP Load Balancer. |
 | **`microsservices/`** | Manifests de deploy dos microsserviços (`ngo-service`, `donation-service`, `volunteer-service`, `job-service`) utilizando **Argo Rollouts**, Services, PDBs e HPA/KEDA. |
 | **`aiops/`** | Deployment, Service, ServiceAccount (GCP Workload Identity) e ClusterRole RBAC para o **AIOps Engine**. |
 | **`argocd/`** | Configurações do Argo CD Application e sincronização declarativa contínua do repositório Git. |
-| **`monitoring/`** | Regras de alertas dos 4 Golden Signals (`golden-signals-rules.yaml`), Secret do New Relic e CronJob do `gcp-status-checker`. |
+| **`monitoring/`** | Regras de alertas dos 4 Golden Signals (`golden-signals-rules.yaml`) e Secret do New Relic (o watchdog do `gcp-status-checker` roda externamente no GitHub Actions). |
 | **`kubecost/`** | Roteamento HTTPRoute e parametrização do Kubecost para governança de custos (FinOps). |
 | **`namespaces/`** | Declaração dos namespaces da aplicação com labels de segurança e quotas. |
 

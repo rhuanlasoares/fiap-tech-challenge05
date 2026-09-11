@@ -87,13 +87,13 @@ jobs:
   #   timeout-minutes: 20
   #   uses: ./.github/workflows/build-push-gitops.yaml
   #   with:
-  #     imageName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-donation-sa/donation-service
+  #     imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-donation-sa/donation-service
   #     imageTag: ${{ github.sha }}
   #     nameService: donation-service
   #     region: southamerica-east1
   #     service_path: apps/donation-service
   #   secrets:
-  #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'ces-igniteprogram' }}
+  #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}
   #     WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
   #     SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
   #     TOKEN: ${{ secrets.GITHUB_TOKEN }}

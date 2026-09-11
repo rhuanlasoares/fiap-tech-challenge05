@@ -223,3 +223,36 @@ permissions:
 Todas as operações com o Google Cloud (envio de imagens para o Artifact Registry) utilizam **OIDC nativo**:
 - **Zero chaves estáticas:** Nenhuma chave JSON de Service Account é armazenada no GitHub.
 - **Tokens temporários:** O GitHub Actions negocia um token de acesso de curta duração (máximo 1 hora) diretamente com o GCP IAM.
+
+---
+
+## 🛡️ 6. Automações de Resiliência & Disaster Recovery (DR)
+
+Além das esteiras de CI/CD e DevSecOps, o repositório conta com dois workflows dedicados à continuidade de negócios e auto-recuperação:
+
+### 6.1. Workflow Operacional 1-Click: `disaster-recovery.yaml`
+📁 **Arquivo:** [`.github/workflows/disaster-recovery.yaml`](file:///.github/workflows/disaster-recovery.yaml)  
+* **Finalidade**: Permitir que qualquer membro do time ou On-Call execute ações de contingência com 1 clique na interface do GitHub.
+* **Gatilho**: `workflow_dispatch` (manual) ou disparado via REST API pelo Watchdog.
+* **Ações Disponíveis no Menu**:
+  * `status`: Diagnóstico completo de saúde de bancos e clusters GKE.
+  * `ha-failover`: Failover zonal síncrono de banco em São Paulo (< 60s, RPO = 0, sem alteração de estado).
+  * `cross-region-sql-failover`: Falha isolada de Cloud SQL em SP -> Promove réplica em `us-east1` mantendo pods em SP.
+  * `gke-failover`: Falha isolada de GKE em SP -> Ativa `gke-useast` na Virgínia conectando no Cloud SQL de SP.
+  * `full-regional-failover`: Blackout total em SP -> Ativa cluster e promove bancos nos EUA.
+  * `switchback-sql`: Retorno do banco para SP com freeze, export/import e zero perda de dados.
+  * `switchback-gke`: Retorno do tráfego para GKE em SP e destruição de nós nos EUA (FinOps).
+  * `full-regional-switchback`: Retorno coordenado completo de banco e cluster.
+* **Recursos de Governança**:
+  * **Guardrail de Segurança**: Se `dry_run=false`, exige digitação da palavra `CONFIRMAR-DR`.
+  * **WIF OIDC**: Autenticação sem chaves JSON estáticas.
+  * **Step Summary & Slack**: Relatório executivo formatado publicado no GitHub e no Slack (`#incidentes-sre`).
+
+### 6.2. Watchdog Inteligente Externo: `gcp-status-checker.yaml`
+📁 **Arquivo:** [`.github/workflows/gcp-status-checker.yaml`](file:///.github/workflows/gcp-status-checker.yaml)  
+* **Finalidade**: Monitor proativo externo que roda a cada 5 minutos nos runners independentes do GitHub (fora do GCP São Paulo).
+* **Gatilho**: `schedule: - cron: '*/5 * * * *'` e `workflow_dispatch`.
+* **Características SRE**:
+  * **Fast-Confirmation Loop**: Ao detectar anomalia na 1ª checagem, não espera 15 minutos! Executa 2 re-checagens a cada 30 segundos, confirmando a falha e disparando o DR em **~65 segundos**.
+  * **Persistência de Estado no GCS**: Salva contadores e topologia em `gs://gcs-velero-bucket-solidary-tech-rh/gcp-status-checker-state.json`.
+  * **Flag de Segurança**: Se `REQUIRE_MANUAL_CONFIRMATION=true` (padrão), envia card com alerta crítico no Slack com link de 1-clique para o time autorizar. Se desativada, dispara a pipeline de forma 100% autônoma.

@@ -97,7 +97,7 @@ resource "google_container_node_pool" "spot_nodes" {
     }
 
     labels = merge(var.gke_resource_labels, {
-      "node.kubernetes.io/instance-type" = "spot"
+      "node_type" = "spot"
     })
 
     tags = ["gke-node", "${var.gke_cluster_name}-node"]

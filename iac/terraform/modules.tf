@@ -36,7 +36,7 @@ module "wifederation" {
   workload_identity_pool_provider_id = var.workload_identity_pool_provider_id
   display_name_wip_provider          = var.display_name_wip_provider
   owner_and_repository               = var.owner_and_repository
-  sa_wifederation_email              = var.sa_wifederation_email
+  sa_wifederation_email              = module.service_accounts.sa_email["sa-wifederation-fiap"]
 }
 
 module "artifact_registry" {
@@ -93,7 +93,8 @@ module "iam" {
     module.vpc,
     module.service_accounts,
     module.artifact_registry,
-    module.secret_manager
+    module.secret_manager,
+    module.gke
   ]
   source = "./modules/iam"
 
@@ -140,7 +141,7 @@ module "cloud_sql" {
 }
 
 module "gke" {
-  depends_on = [module.vpc, module.iam]
+  depends_on = [module.vpc, module.service_accounts]
   source     = "./modules/gke"
   for_each   = var.gke
 

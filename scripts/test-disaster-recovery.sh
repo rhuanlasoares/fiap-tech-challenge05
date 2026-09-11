@@ -14,7 +14,7 @@ CYAN="\033[0;36m"
 BOLD="\033[1m"
 RESET="\033[0m"
 
-PROJECT_ID="${PROJECT_ID:-ces-igniteprogram}"
+PROJECT_ID="${PROJECT_ID:-naconfeitaria}"
 ADDRESS_NAME="gke-ip-lb"
 SCHEME="https"
 BASE_URL=""
@@ -31,7 +31,7 @@ usage() {
     echo "  -s, --service <NAME> Service to test: 'donation-service', 'ngo-service' or 'volunteer-service' (default: volunteer-service)"
     echo "  -i, --interval <SEC> Loop sleep interval in seconds (default: 1)"
     echo "  -t, --timeout <SEC>  HTTP request timeout in seconds (default: 5)"
-    echo "  -p, --project <ID>   GCP Project ID (default: ces-igniteprogram)"
+    echo "  -p, --project <ID>   GCP Project ID (default: naconfeitaria)"
     echo "  --http               Use http:// instead of https://"
     echo "  --https              Use https:// (default)"
     echo "  -u, --url <BASE_URL> Custom Base URL (e.g. https://solidary-tech.8.232.78.3.nip.io)"
@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -p|--project)
-            PROJECT_ID="${2:-ces-igniteprogram}"
+            PROJECT_ID="${2:-naconfeitaria}"
             shift 2
             ;;
         --http)

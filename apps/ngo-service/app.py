@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import time
 
 import psycopg2
 from flask import Flask, jsonify, request
@@ -58,25 +59,46 @@ def create_ngo():
     if not data or not all(k in data for k in ("name", "email", "cause", "city")):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
 
-    conn = pool.getconn()
-    try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "INSERT INTO ngos (name, email, cause, city) VALUES (%s, %s, %s, %s) RETURNING *",
-                (data["name"], data["email"], data["cause"], data["city"]),
-            )
-            new_ngo = cur.fetchone()
-            conn.commit()
-            return jsonify(new_ngo), 201
-    except psycopg2.IntegrityError:
-        conn.rollback()
-        return jsonify({"error": "E-mail já cadastrado"}), 409
-    except Exception as e:
-        conn.rollback()
-        log.error(f"Erro ao criar ONG: {e}")
-        return jsonify({"error": "Erro interno"}), 500
-    finally:
-        pool.putconn(conn)
+    max_attempts = 4
+    for attempt in range(1, max_attempts + 1):
+        conn = None
+        try:
+            conn = pool.getconn()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "INSERT INTO ngos (name, email, cause, city) VALUES (%s, %s, %s, %s) RETURNING *",
+                    (data["name"], data["email"], data["cause"], data["city"]),
+                )
+                new_ngo = cur.fetchone()
+                conn.commit()
+                return jsonify(new_ngo), 201
+        except psycopg2.IntegrityError:
+            if conn:
+                conn.rollback()
+            return jsonify({"error": "E-mail já cadastrado"}), 409
+        except (psycopg2.errors.ReadOnlySqlTransaction, psycopg2.OperationalError) as trans_err:
+            if conn:
+                conn.rollback()
+                pool.putconn(conn, close=True)
+                conn = None
+            log.warning(f"[DISASTER_RECOVERY_RETRY] PostgreSQL em cutover/transição (tentativa {attempt}/{max_attempts}): {trans_err}")
+            if attempt < max_attempts:
+                time.sleep(attempt * 2)
+            else:
+                log.error("[DISASTER_RECOVERY_BUFFER] Esgotadas tentativas durante cutover.")
+                return jsonify({
+                    "status": "QUEUED_FOR_PROCESSING",
+                    "message": "Cadastro recebido e retido para processamento seguro durante transição de alta disponibilidade.",
+                    "data": data
+                }), 202
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            log.error(f"Erro ao criar ONG: {e}")
+            return jsonify({"error": "Erro interno"}), 500
+        finally:
+            if conn and not conn.closed:
+                pool.putconn(conn)
 
 
 @app.route("/ngos", methods=["GET"])

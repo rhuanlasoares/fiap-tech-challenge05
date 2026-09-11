@@ -7,6 +7,7 @@ resource "google_sql_database_instance" "main" {
   settings {
     user_labels       = var.instance_labels
     tier              = var.instance_tier
+    edition           = "ENTERPRISE"
     availability_type = "REGIONAL"
 
     ip_configuration {
@@ -50,8 +51,9 @@ resource "google_sql_database_instance" "replica" {
     user_labels = merge(var.instance_labels, {
       "sql-replica" = "true"
     })
+    edition           = "ENTERPRISE"
     tier              = var.instance_tier
-    availability_type = "REGIONAL"
+    availability_type = "ZONAL"
     ip_configuration {
       ipv4_enabled       = false
       private_network    = var.vpc_self_link
@@ -65,6 +67,7 @@ resource "google_sql_database_instance" "replica" {
 
   lifecycle {
     ignore_changes = [
+      master_instance_name,
       settings[0].maintenance_window,
       settings[0].disk_size
     ]

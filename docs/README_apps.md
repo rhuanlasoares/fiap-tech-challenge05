@@ -25,7 +25,7 @@ apps/
 | **`ngo-service`** | Python / Flask | Gerenciamento de ONGs parceiras, cadastro e consulta de projetos sociais | PostgreSQL (Cloud SQL), OpenTelemetry, Prometheus |
 | **`donation-service`** | Python / Flask | Recepção e liquidação assíncrona de doações financeiras | Amazon SQS, PostgreSQL (Cloud SQL), KEDA, OpenTelemetry |
 | **`volunteer-service`** | Python / Flask | Gestão de perfis e engajamento de voluntários | PostgreSQL (Cloud SQL), OpenTelemetry, Prometheus |
-| **`gcp-status-checker`** | Python | Varredura de incidentes públicos da GCP na região com modo de simulação de desastres | GCP Incident RSS/API, New Relic, Slack Webhooks |
+| **`gcp-status-checker`** | Python | Watchdog autônomo executado via GitHub Actions para detecção de falhas da GCP e auto-disparo de Disaster Recovery com persistência de estado em GCS | GCP Status API, GCS State Storage, GitHub Actions REST API, Slack Webhooks |
 
 ---
 

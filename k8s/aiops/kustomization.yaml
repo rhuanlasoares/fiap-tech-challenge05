@@ -15,5 +15,5 @@ labels:
 
 images:
   - name: aiops-engine
-    newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-aiops/aiops
+    newName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-aiops/aiops
     newTag: latest

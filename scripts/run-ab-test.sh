@@ -15,7 +15,7 @@ BOLD="\033[1m"
 RESET="\033[0m"
 
 # Default Configuration Values
-PROJECT_ID="${PROJECT_ID:-ces-igniteprogram}"
+PROJECT_ID="${PROJECT_ID:-naconfeitaria}"
 ADDRESS_NAME="gke-ip-lb"
 SCHEME="https"
 BASE_URL=""

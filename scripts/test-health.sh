@@ -21,28 +21,31 @@ SERVICES=(
     "volunteer-service|/volunteer-service/health"
 )
 
-PROJECT_ID="${PROJECT_ID:-ces-igniteprogram}"
+PROJECT_ID="${PROJECT_ID:-naconfeitaria}"
 ADDRESS_NAME="gke-ip-lb"
 SCHEME="https"
 BASE_URL=""
 TIMEOUT=10
 INSECURE="-k"
+TEST_REDIRECT=false
 
 usage() {
     echo -e "${BOLD}Usage:${RESET} $0 [OPTIONS]"
     echo ""
     echo -e "${BOLD}Options:${RESET}"
-    echo "  -p, --project <ID>   GCP Project ID (default: ces-igniteprogram)"
-    echo "  --http               Use http:// instead of https://"
+    echo "  -p, --project <ID>   GCP Project ID (default: naconfeitaria)"
+    echo "  --http               Use http:// instead of https:// (follows redirect to HTTPS)"
     echo "  --https              Use https:// (default)"
+    echo "  --test-redirect      Test HTTP -> HTTPS automatic redirect (verifies HTTP 301 and Location)"
     echo "  -u, --url <BASE_URL> Custom Base URL (e.g. https://solidary-tech.8.232.78.3.nip.io)"
     echo "  -t, --timeout <SEC>  Timeout in seconds for each request (default: 10)"
     echo "  -h, --help           Show this help message"
     echo ""
     echo -e "${BOLD}Examples:${RESET}"
     echo "  $0                                   # Auto-fetch Load Balancer IP and test https://solidary-tech.<IP>.nip.io"
-    echo "  $0 --http                            # Test via http://solidary-tech.<IP>.nip.io"
-    echo "  $0 --project ces-igniteprogram"
+    echo "  $0 --http                            # Test via http:// (follows 301 redirect to https)"
+    echo "  $0 --test-redirect                   # Specifically verify HTTP 301 redirect behavior"
+    echo "  $0 --project naconfeitaria"
     echo "  $0 --url https://my-domain.com"
     exit 0
 }
@@ -51,7 +54,7 @@ usage() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -p|--project)
-            PROJECT_ID="${2:-ces-igniteprogram}"
+            PROJECT_ID="${2:-naconfeitaria}"
             shift 2
             ;;
         --http)
@@ -60,6 +63,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --https)
             SCHEME="https"
+            shift
+            ;;
+        --test-redirect)
+            TEST_REDIRECT=true
+            SCHEME="http"
             shift
             ;;
         -u|--url)
@@ -100,7 +108,11 @@ if [[ -z "$BASE_URL" ]]; then
 fi
 
 echo -e "${BOLD}${CYAN}====================================================${RESET}"
-echo -e "${BOLD}${CYAN}   Microservices External Health Check Validator    ${RESET}"
+if [[ "$TEST_REDIRECT" == "true" ]]; then
+    echo -e "${BOLD}${CYAN}   HTTP -> HTTPS Redirect Validator (Port 80 -> 443) ${RESET}"
+else
+    echo -e "${BOLD}${CYAN}   Microservices External Health Check Validator    ${RESET}"
+fi
 echo -e "${BOLD}${CYAN}====================================================${RESET}"
 echo -e "Target URL: ${YELLOW}${BASE_URL}${RESET}"
 echo -e "Timeout: ${YELLOW}${TIMEOUT}s${RESET}"
@@ -115,29 +127,58 @@ for svc_item in "${SERVICES[@]}"; do
 
     echo -ne "Testing ${BOLD}${name}${RESET} at ${CYAN}${full_url}${RESET}... "
 
-    res=$(curl $INSECURE -s -m "$TIMEOUT" -w "\n%{http_code}" "$full_url" 2>/dev/null || echo "FAILED")
+    if [[ "$TEST_REDIRECT" == "true" ]]; then
+        # Check HTTP 301 and Location header without following redirect
+        headers=$(curl $INSECURE -s -m "$TIMEOUT" -I "$full_url" 2>/dev/null || echo "FAILED")
 
-    if [[ "$res" == "FAILED" || -z "$res" ]]; then
-        echo -e "${RED}[FAIL]${RESET} - Connection failed or timed out"
-        continue
-    fi
+        if [[ "$headers" == "FAILED" || -z "$headers" ]]; then
+            echo -e "${RED}[FAIL]${RESET} - Connection failed or timed out"
+            continue
+        fi
 
-    body=$(echo "$res" | head -n -1)
-    http_code=$(echo "$res" | tail -n 1)
+        http_code=$(echo "$headers" | head -n 1 | awk '{print $2}')
+        location=$(echo "$headers" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 
-    if [[ "$http_code" == "200" ]]; then
-        echo -e "${GREEN}[OK]${RESET} (HTTP ${http_code}) - Body: ${body}"
-        PASSED_COUNT=$((PASSED_COUNT + 1))
+        if [[ "$http_code" == "301" && "$location" =~ ^https:// ]]; then
+            echo -e "${GREEN}[OK]${RESET} (HTTP ${http_code} Moved Permanently -> ${location})"
+            PASSED_COUNT=$((PASSED_COUNT + 1))
+        else
+            echo -e "${RED}[FAIL]${RESET} (HTTP ${http_code}) - Location: ${location}"
+        fi
     else
-        echo -e "${RED}[FAIL]${RESET} (HTTP ${http_code}) - Body: ${body}"
+        # Normal health check with -L (follow redirect if scheme is http)
+        res=$(curl $INSECURE -L -s -m "$TIMEOUT" -w "\n%{http_code}" "$full_url" 2>/dev/null || echo "FAILED")
+
+        if [[ "$res" == "FAILED" || -z "$res" ]]; then
+            echo -e "${RED}[FAIL]${RESET} - Connection failed or timed out"
+            continue
+        fi
+
+        body=$(echo "$res" | head -n -1)
+        http_code=$(echo "$res" | tail -n 1)
+
+        if [[ "$http_code" == "200" ]]; then
+            echo -e "${GREEN}[OK]${RESET} (HTTP ${http_code}) - Body: ${body}"
+            PASSED_COUNT=$((PASSED_COUNT + 1))
+        else
+            echo -e "${RED}[FAIL]${RESET} (HTTP ${http_code}) - Body: ${body}"
+        fi
     fi
 done
 
 echo -e "\n${CYAN}----------------------------------------------------${RESET}"
 if [[ "$PASSED_COUNT" -eq "$TOTAL_COUNT" ]]; then
-    echo -e "${GREEN}${BOLD}Result: PASS (${PASSED_COUNT}/${TOTAL_COUNT} services healthy)${RESET}"
+    if [[ "$TEST_REDIRECT" == "true" ]]; then
+        echo -e "${GREEN}${BOLD}Result: PASS (${PASSED_COUNT}/${TOTAL_COUNT} routes correctly redirect HTTP -> HTTPS)${RESET}"
+    else
+        echo -e "${GREEN}${BOLD}Result: PASS (${PASSED_COUNT}/${TOTAL_COUNT} services healthy)${RESET}"
+    fi
     exit 0
 else
-    echo -e "${RED}${BOLD}Result: FAIL (${PASSED_COUNT}/${TOTAL_COUNT} services healthy)${RESET}"
+    if [[ "$TEST_REDIRECT" == "true" ]]; then
+        echo -e "${RED}${BOLD}Result: FAIL (${PASSED_COUNT}/${TOTAL_COUNT} routes redirecting HTTP -> HTTPS)${RESET}"
+    else
+        echo -e "${RED}${BOLD}Result: FAIL (${PASSED_COUNT}/${TOTAL_COUNT} services healthy)${RESET}"
+    fi
     exit 1
 fi

@@ -1,0 +1,17 @@
+---
+kind: HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: http-to-https-redirect
+  namespace: gateway-api-ns
+spec:
+  parentRefs:
+  - name: gateway-applications
+    namespace: gateway-api-ns
+    sectionName: http
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301

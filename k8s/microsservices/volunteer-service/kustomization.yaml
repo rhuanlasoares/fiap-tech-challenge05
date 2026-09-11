@@ -20,5 +20,5 @@ labels:
 
 images:
 - name: volunteer-service
-  newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-volunteer-sa/volunteer-service
+  newName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-volunteer-sa/volunteer-service
   newTag: latest

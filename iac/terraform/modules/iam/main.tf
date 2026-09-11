@@ -63,14 +63,6 @@ locals {
 }
 
 resource "google_service_account_iam_member" "sa_identity_gke" {
-  depends_on = [
-    google_artifact_registry_repository_iam_member.artreg_member,
-    google_compute_subnetwork_iam_member.member,
-    google_project_iam_member.sa_cloud_sql_client,
-    google_project_iam_member.sa_user,
-    google_secret_manager_secret_iam_member.secret_member,
-    google_project_iam_member.kubernetes_developer
-  ]
   for_each           = local.namespace_name
   service_account_id = var.sa_gke_name
   role               = "roles/iam.workloadIdentityUser"
@@ -86,11 +78,11 @@ resource "google_service_account_iam_member" "sa_identity_gke_monitoring" {
 resource "google_project_iam_member" "sa_identity_gke_keda" {
   project = var.project_id
   role    = "roles/monitoring.viewer"
-  member  = "principal://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.project_id}.svc.id.goog/subject/ns/keda/sa/keda-operator"
+  member  = "serviceAccount:${var.project_id}.svc.id.goog[keda/keda-operator]"
 }
 
 resource "google_project_iam_member" "sa_identity_gke_loki_bucket" {
   project = var.project_id
   role    = "roles/storage.objectUser"
-  member  = "principal://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.project_id}.svc.id.goog/subject/ns/monitoring-ns/sa/sa-gke"
+  member  = "serviceAccount:${var.project_id}.svc.id.goog[monitoring-ns/sa-gke]"
 }

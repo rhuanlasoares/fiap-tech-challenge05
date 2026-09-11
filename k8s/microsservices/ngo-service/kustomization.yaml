@@ -22,5 +22,5 @@ labels:
 
 images:
 - name: ngo-service
-  newName:  southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-ngo-sa/ngo-service
+  newName:  southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-ngo-sa/ngo-service
   newTag: latest

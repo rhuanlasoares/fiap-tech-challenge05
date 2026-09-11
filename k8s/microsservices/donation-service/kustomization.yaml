@@ -22,5 +22,5 @@ labels:
 
 images:
 - name: donation-service
-  newName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-donation-sa/donation-service
+  newName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-donation-sa/donation-service
   newTag: latest

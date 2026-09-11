@@ -14,7 +14,7 @@ CYAN="\033[0;36m"
 BOLD="\033[1m"
 RESET="\033[0m"
 
-PROJECT_ID="${PROJECT_ID:-ces-igniteprogram}"
+PROJECT_ID="${PROJECT_ID:-naconfeitaria}"
 ADDRESS_NAME="gke-ip-lb"
 SCHEME="https"
 BASE_URL=""
@@ -25,7 +25,7 @@ usage() {
     echo -e "${BOLD}Usage:${RESET} $0 [OPTIONS]"
     echo ""
     echo -e "${BOLD}Options:${RESET}"
-    echo "  -p, --project <ID>   GCP Project ID (default: ces-igniteprogram)"
+    echo "  -p, --project <ID>   GCP Project ID (default: naconfeitaria)"
     echo "  --http               Use http:// instead of https://"
     echo "  --https              Use https:// (default)"
     echo "  -u, --url <BASE_URL> Custom Base URL (e.g. https://solidary-tech.8.232.78.3.nip.io)"
@@ -35,7 +35,7 @@ usage() {
     echo -e "${BOLD}Examples:${RESET}"
     echo "  $0                                   # Auto-fetch Load Balancer IP and test all external routes"
     echo "  $0 --http                            # Test via http://solidary-tech.<IP>.nip.io"
-    echo "  $0 --project ces-igniteprogram"
+    echo "  $0 --project naconfeitaria"
     echo "  $0 --url https://my-custom-domain.com"
     exit 0
 }
@@ -44,7 +44,7 @@ usage() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -p|--project)
-            PROJECT_ID="${2:-ces-igniteprogram}"
+            PROJECT_ID="${2:-naconfeitaria}"
             shift 2
             ;;
         --http)

@@ -8,6 +8,7 @@ spec:
   parentRefs:
   - name: gateway-applications
     namespace: gateway-api-ns
+    sectionName: https
   hostnames:
   - "argocd.${GATEWAY_IP}.nip.io"
   rules:

@@ -150,12 +150,14 @@ ightarrow$ **SLO: 99.90%**.
 
 ### 5. 🛡️ Multicloud, Segurança & Disaster Recovery (DR)
 - **Plano de Continuidade de Negócios (PCN)**:
-  - **RPO (Recovery Point Objective)**: **$< 5$ segundos** para doações.
-  - **RTO (Recovery Time Objective)**: **$< 2$ minutos** para promoção do Cloud SQL e **$< 8$ minutos** para bootstrap do GKE DR.
-- **Estratégias Práticas de DR**:
-  - **Backup Cross-Region com Velero**: Snapshots periódicos de manifests e volumes para o bucket `gcs-velero-bucket-solidary-tech-rh`.
-  - **Infraestrutura Ativo-Passivo (Warm Standby)**: O cluster secundário em `us-east1` (`gke-useast`) é provisionado via Terraform alterando `should_be_create = true`, com reconciliação automática de aplicações via ArgoCD.
-  - **Cloud SQL Cross-Region Read Replica**: Instância em `us-east1` pronta para promoção imediata a Master.
+  - **RPO (Recovery Point Objective)**: **0 segundos (Zero Data Loss)** no hot path de doações via buffer durável em AWS SQS (`PENDING_BUFFERED`) e worker de auto-drain.
+  - **RTO (Recovery Time Objective)**: **< 60 segundos** para Regional HA Failover, **< 2 minutos** para promoção do Cloud SQL e **< 5 minutos** para GKE DR.
+- **Estratégias Avançadas de Resiliência & SRE**:
+  - **Isolamento Fino de Falhas**: Matriz para falha isolada de GKE, falha isolada de Cloud SQL e blackout regional total.
+  - **Blindagem contra Drift no Terraform**: Diretiva `lifecycle { ignore_changes = [master_instance_name, ...] }` impede que pipelines destruam bancos promovidos na crise.
+  - **Watchdog Autônomo com Fast-Confirmation Loop**: Monitor externo no GitHub Actions detecta incidentes oficiais da GCP e confirma falhas em **~65 segundos** (evitando espera de 15 minutos), com persistência em GCS e alertas no Slack.
+  - **Operação 1-Click via GitHub Actions**: Workflow `.github/workflows/disaster-recovery.yaml` com guardrails e CLI padronizado `scripts/disaster-recovery-manager.sh`.
+  - **Backup Cross-Region com Velero**: Snapshots periódicos de namespaces críticos e volumes no bucket multi-region.
 
 ---
 

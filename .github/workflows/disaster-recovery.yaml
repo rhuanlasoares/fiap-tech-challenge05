@@ -1,0 +1,122 @@
+name: 🚨 SRE Disaster Recovery & Zero-Data-Loss Failover
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Ação de Recuperação de Desastre:"
+        required: true
+        type: choice
+        default: "status"
+        options:
+          - "status"
+          - "ha-failover"
+          - "cross-region-sql-failover"
+          - "gke-failover"
+          - "full-regional-failover"
+          - "switchback-sql"
+          - "switchback-gke"
+          - "full-regional-switchback"
+      service:
+        description: "Microsserviço alvo:"
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "donation-service"
+          - "ngo-service"
+      dry_run:
+        description: "Executar em modo Simulação (Dry-Run)? Desmarque para aplicar de verdade."
+        required: true
+        type: boolean
+        default: true
+      confirmation:
+        description: "Se Dry-Run estiver DESMARCADO, digite 'CONFIRMAR-DR' para validar:"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  disaster-recovery:
+    name: 🛡️ Executar Disaster Recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: 🛡️ Validação de Guardrail de Segurança
+        run: |
+          if [ "${{ inputs.dry_run }}" = "false" ] && [ "${{ inputs.action }}" != "status" ]; then
+            if [ "${{ inputs.confirmation }}" != "CONFIRMAR-DR" ]; then
+              echo "❌ ERRO: Para executar ações reais de failover/switchback, digite exatamente 'CONFIRMAR-DR' no campo de confirmação."
+              exit 1
+            fi
+          fi
+          echo "✅ Guardrail validado com sucesso!"
+
+      - name: 🔑 Autenticação no GCP via WIF (Zero Static Keys)
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT || 'sa-wifederation-fiap@naconfeitaria.iam.gserviceaccount.com' }}
+
+      - name: ☁️ Configurar Cloud SDK e GKE
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: ☸️ Obter Credenciais do Cluster GKE (se disponível)
+        uses: google-github-actions/get-gke-credentials@v2
+        continue-on-error: true
+        with:
+          cluster_name: gke-samerica
+          location: southamerica-east1
+
+      - name: 🚀 Executar Disaster Recovery Manager
+        id: run_dr
+        run: |
+          chmod +x ./scripts/disaster-recovery-manager.sh
+          
+          DRY_RUN_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+
+          ./scripts/disaster-recovery-manager.sh \
+            --action "${{ inputs.action }}" \
+            --service "${{ inputs.service }}" \
+            --project "${{ secrets.PROJECT_ID || 'naconfeitaria' }}" \
+            $DRY_RUN_FLAG
+
+      - name: 📊 Resumo da Operação (GitHub Step Summary)
+        if: always()
+        run: |
+          echo "## 🛡️ Resumo da Operação de Disaster Recovery" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parâmetro | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Ação Solicitada** | \`${{ inputs.action }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Serviço Alvo** | \`${{ inputs.service }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Modo de Execução** | \`Dry-Run: ${{ inputs.dry_run }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Executado por** | \`@${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status da Execução** | \`${{ job.status }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🔔 Notificar no Slack
+        if: always() && env.SLACK_WEBHOOK != ''
+        env:
+          SLACK_WEBHOOK: ${{ secrets.WEBHOOK_SLACK }}
+        run: |
+          PAYLOAD=$(cat <<JSON
+          {
+            "text": "🛡️ *Disaster Recovery Alert — SolidaryTech*\n*Ação:* \`${{ inputs.action }}\` | *Serviço:* \`${{ inputs.service }}\`\n*Operador:* @${{ github.actor }}\n*Status:* *${{ job.status }}*\n*Dry-Run:* ${{ inputs.dry_run }}"
+          }
+          JSON
+          )
+          curl -s -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$SLACK_WEBHOOK" || true

@@ -1,7 +1,7 @@
 #!bin/bash
 
 echo "Buscando IP no Google Cloud..."
-PROJECT_ID="ces-igniteprogram"
+PROJECT_ID="naconfeitaria"
 export GATEWAY_IP=$(gcloud compute addresses describe gke-ip-lb --global --format='value(address)' --project $PROJECT_ID)
 K8S_DIR="k8s"
 
@@ -13,6 +13,7 @@ envsubst < $K8S_DIR/microsservices/volunteer-service/volunteer-http-route.yaml.t
 envsubst < $K8S_DIR/monitoring/monitoring-http-route.yaml.template > $K8S_DIR/monitoring/monitoring-http-route.yaml
 envsubst < $K8S_DIR/argocd/argocd-http-route.yaml.template > $K8S_DIR/argocd/argocd-http-route.yaml
 envsubst < $K8S_DIR/kubecost/kubecost-http-route.yaml.template > $K8S_DIR/kubecost/kubecost-http-route.yaml
+envsubst < $K8S_DIR/aiops/aiops-http-route.yaml.template > $K8S_DIR/aiops/aiops-http-route.yaml
 
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/namespaces.yaml -e "env=$K8S_DIR"
 ansible-playbook -i /etc/ansible/hosts iac/ansible/playbooks/keda.yaml -e "env=$K8S_DIR"

@@ -87,13 +87,13 @@ jobs:
   #   timeout-minutes: 20
   #   uses: ./.github/workflows/build-push-gitops.yaml
   #   with:
-  #     imageName: southamerica-east1-docker.pkg.dev/ces-igniteprogram/artreg-aiops-sa/aiops-engine
+  #     imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-aiops-sa/aiops-engine
   #     imageTag: ${{ github.sha }}
   #     nameService: aiops-engine
   #     region: southamerica-east1
   #     service_path: apps/aiops-engine
   #   secrets:
-  #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'ces-igniteprogram' }}
+  #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}
   #     WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
   #     SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
   #     TOKEN: ${{ secrets.GITHUB_TOKEN }}

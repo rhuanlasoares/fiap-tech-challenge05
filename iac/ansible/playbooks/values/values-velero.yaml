@@ -45,7 +45,7 @@ configuration:
     - name: default
       provider: gcp
       config:
-        project: "ces-igniteprogram" # <-- Seu Project ID da GCP
+        project: "naconfeitaria" # <-- Seu Project ID da GCP
         # snapshotLocation: southamerica-east1 # Opcional: região dos snapshots
 
   # Configurações do Servidor
@@ -97,6 +97,8 @@ schedules:
         - ngo-ns
         - donation-ns
         - volunteer-ns
+        - argocd
+        - aiops
 
   # 🔵 2. Backup Diário Completo do Cluster (Infraestrutura, Gateways, Keda, etc.)
   daily-full-cluster:

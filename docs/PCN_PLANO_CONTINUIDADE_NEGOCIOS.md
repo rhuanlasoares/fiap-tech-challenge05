@@ -1,134 +1,233 @@
 # 🛡️ Plano de Continuidade de Negócios (PCN) & Disaster Recovery (DR)
-### 🌍 Plataforma SolidaryTech — Resiliência Operacional e Tolerância a Desastres
-**Documento Executivo de Engenharia e Gestão de Riscos (SRE / FinOps / Segurança)**
+### 🌍 Plataforma SolidaryTech — Resiliência Operacional, Zero-Downtime e Tolerância a Desastres
+**Documento Executivo de Engenharia, SRE e Gestão de Continuidade de Negócios**
 
 ---
 
-## 1. Sumário Executivo & Objetivos
+## 1. Sumário Executivo & Objetivos de Continuidade
 
-A **SolidaryTech** é uma plataforma crítica do terceiro setor responsável por conectar milhares de doadores, voluntários e organizações não-governamentais (ONGs) em todo o território nacional. Em momentos de grandes campanhas ou desastres humanitários, a plataforma experimenta picos imprevistos de tráfego.
+A **SolidaryTech** é a espinha dorsal digital para captação de recursos, gestão de voluntários e assistência humanitária a milhares de ONGs no Brasil. Durante catástrofes humanitárias e campanhas de alta visibilidade, picos massivos de tráfego ocorrem simultaneamente à exigência inegociável de disponibilidade contínua.
 
-Este **Plano de Continuidade de Negócios (PCN)** tem como objetivo principal garantir que:
-1. **As doações financeiras não sofram interrupção**, mesmo sob falhas catastróficas em datacenters regionais.
-2. **A perda de dados cadastrais e transacionais seja praticamente nula**.
-3. **O tempo de recuperação de serviços (*Downtime*) seja estritamente controlado** e aderente aos SLAs contratuais acordados com as ONGs parceiras.
-
----
-
-## 2. Análise de Impacto no Negócio (BIA - Business Impact Analysis)
-
-A tabela abaixo classifica a criticidade dos serviços e o impacto direto de sua indisponibilidade:
-
-| Nível de Criticidade | Microsserviço / Componente | Função de Negócio | Impacto de Indisponibilidade |
-| :--- | :--- | :--- | :--- |
-| **Tier 1 (Crítico / Hot Path)** | `donation-service` | Ingestão e processamento de doações | **Crítico**: Perda financeira direta para ONGs e quebra de confiança dos doadores. |
-| **Tier 1 (Crítico / Hot Path)** | `Cloud SQL (Master)` | Persistência transacional das doações | **Crítico**: Impossibilidade de registro e confirmação de pagamento. |
-| **Tier 2 (Alto Impacto)** | `ngo-service` | Cadastro e validação de ONGs | **Alto**: Bloqueio de novas adesões e consultas cadastrais. |
-| **Tier 2 (Alto Impacto)** | `volunteer-service` | Matching de vagas de voluntariado | **Médio/Alto**: Atraso no engajamento de voluntários. |
-| **Tier 3 (Suporte / Ops)** | `gcp-status-checker` | Monitoramento proativo de saúde da nuvem | **Baixo**: Perda temporária de telemetria externa. |
-| **Tier 3 (Suporte / Ops)** | `aiops-engine` | Predição de falhas e Auto-Healing | **Médio**: Retorno à operação reativa manual da equipe On-Call. |
+Este **Plano de Continuidade de Negócios (PCN)** e **Estratégia de Disaster Recovery (DR)** estabelece os padrões de engenharia, arquitetura de dados e procedimentos operacionais necessários para cobrir **todas as possibilidades de indisponibilidade regional e zonal**:
+1. **RPO = 0 (Zero Data Loss) no Hot Path**: Nenhuma doação financeira ou transação é perdida, mesmo em caso de falha isolada de serviço, congelamento de escrita, failover de banco ou blackout regional total.
+2. **Isolamento Fino de Falhas (Failure Domain Isolation)**: Capacidade de responder a falhas parciais (ex: apenas o GKE caiu, ou apenas o Cloud SQL caiu) sem acionar migrações desnecessárias ou romper a topologia de banco de dados.
+3. **Preservação Integral do Estado do Terraform**: Eliminação de drifts e conflitos de estado no Terraform através de diretivas de ciclo de vida (`ignore_changes`).
+4. **Operação Self-Service Unificada**: Qualquer engenheiro ou operador On-Call pode disparar failovers granulares e switchbacks com 1 clique via GitHub Actions ou CLI padronizado.
 
 ---
 
-## 3. Métricas Críticas de Continuidade (RPO e RTO)
+## 2. Matriz Completa de Cenários e Granularidade de Falhas
 
-Os alvos de recuperação foram dimensionados com base no impacto financeiro e na viabilidade técnica:
+A engenharia de SRE da SolidaryTech classifica e responde a 5 cenários distintos de falha na região `southamerica-east1` (São Paulo):
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   ALVOS DE RECUPERAÇÃO DA SOLIDARYTECH                          │
-├───────────────────────────────────────────────────┬─────────────────────────────────────────────┤
-│ RPO (Recovery Point Objective)                    │ RTO (Recovery Time Objective)               │
-│ Tolerância Máxima de Perda de Dados               │ Tempo Máximo para Restabelecimento do Ar    │
-├───────────────────────────────────────────────────┼─────────────────────────────────────────────┤
-│ • Dados de Doações (Hot Path): < 5 segundos       │ • Failover de Banco de Dados: < 2 minutos   │
-│ • Dados Cadastrais de ONGs/Voluntários: < 1 hora  │ • Failover de Cluster GKE (DR): < 8 minutos │
-│ • Manifestos K8s & Configurações: 0 segundos      │ • Restauração de Namespace (Velero): < 5 min│
-│   (Versionados via GitOps no repositório)         │                                             │
-└───────────────────────────────────────────────────┴─────────────────────────────────────────────┘
+| Cenário de Incidente | Componente Afetado | Ação no GKE | Ação no Cloud SQL | Ação no Velero | RPO | RTO Estimado |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Cenário 1: Falha Zonal (HA)** | 1 Zona de SP (ex: `southamerica-east1-a`) | Nós em `b`/`c` assumem pods via `TopologySpreadConstraints` | Failover Zonal automático (`gcloud sql instances failover`) mantendo storage e IP | Não acionado | **0s** | **< 60 segundos** |
+| **Cenário 2: Falha Isolada de GKE em SP** | Apenas o Control Plane / Nós do GKE em SP (Cloud SQL 100% online em SP) | Ativar `gke-useast` no Terraform; ArgoCD reconcilia manifests | **NENHUMA ALTERAÇÃO!** Cloud SQL Master mantido em SP. `gke-useast` conecta via VPC Global | Restaura secrets de runtime e PVCs via bucket GCS | **0s** | **< 5 minutos** |
+| **Cenário 3: Falha Isolada de Cloud SQL em SP** | Apenas o banco de dados em SP (`gke-samerica` 100% saudável em SP) | **NENHUMA ALTERAÇÃO!** `gke-samerica` permanece ativo em SP. Re-aponta proxy para `us-east1` | Promover réplica `sql-rhuan-*-replica` em `us-east1` | Não acionado | **< 5s** (ou 0s com buffer SQS) | **< 2 minutos** |
+| **Cenário 4: Falha Isolada de Storage (GCS) em SP** | GCS temporariamente degradado em SP (GKE e DB operando normalmente) | Workloads continuam operando normalmente sem impacto | Nenhuma alteração | Backups usam bucket secundário / multi-region | **0s** | **0s (Sem impacto no usuário)** |
+| **Cenário 5: Blackout Regional Total em SP** | Colapso total de SP (GKE, Cloud SQL, Rede e Storage inacessíveis) | Ativar `gke-useast` via Terraform + ArgoCD | Promover réplicas `sql-rhuan-*-replica` como novos Masters em `us-east1` | Restaura estado a partir de bucket Multi-Region | **0s** (com buffer SQS) | **< 8 minutos** |
+
+---
+
+## 3. Detalhamento dos Cenários Granulares
+
+### 3.1. Cenário 2: Falha Isolada do Serviço do GKE em São Paulo
+* **Diagnóstico**: O cluster `gke-samerica` está inacessível (ex: incidente na API do Kubernetes ou falha nos node pools de SP), porém o Cloud SQL (`sql-rhuan-donation` e `sql-rhuan-ngo`) e a rede VPC continuam 100% saudáveis em São Paulo.
+* **Decisão Arquitetural Crucial**: **NÃO promover a réplica do Cloud SQL.**
+  - A VPC `vpc-rhuan` é uma rede global do Google Cloud. As sub-redes `subnet-gke-sa` e `subnet-gke-us` comunicam-se nativamente através do backbone privado de fibra da Google.
+  - O cluster `gke-useast` na Virgínia conecta-se diretamente ao Cloud SQL Master em São Paulo via Private Services Access (PSA) ou Cloud SQL Auth Proxy.
+  - A latência interregional aumenta (~110ms), mas o sistema permanece online e **nenhuma migração de banco é exigida**, eliminando riscos de inconsistência de dados.
+* **Restauração via Velero**: Como o Cloud Storage em São Paulo está operacional, o Velero instalado em `gke-useast` acessa o bucket `gcs-velero-bucket-solidary-tech-rh` e restaura namespaces e PVCs em menos de 3 minutos.
+* **Comutação de Tráfego**: O Gateway API / Cloud DNS atualiza o apontamento para o IP do Load Balancer em `us-east1`.
+
+### 3.2. Cenário 3: Falha Isolada do Cloud SQL em São Paulo
+* **Diagnóstico**: O GKE `gke-samerica` está saudável, mas a instância primária do Cloud SQL sofreu corrupção de volume ou falha regional intransponível no serviço gerenciado.
+* **Decisão Arquitetural**: **NÃO recriar o cluster GKE nos EUA.**
+  - Promove-se a réplica de leitura `sql-rhuan-*-replica` em `us-east1` para master independente.
+  - Os pods em execução em São Paulo atualizam o Secret `CLOUDSQL_CONNECTION_NAME` apontando para `naconfeitaria:us-east1:sql-rhuan-*-replica` e reiniciam graciosamente.
+  - Os pods continuam atendendo usuários em São Paulo, gravando no banco promovido na Virgínia via VPC global.
+
+### 3.3. Cenário 5: Blackout Regional Total (Desastre Completo)
+* **Diagnóstico**: Desconexão total da região `southamerica-east1`.
+* **Ação Coordenada**:
+  1. Ativar `gke-useast` no Terraform (`should_be_create = true`).
+  2. Promover as réplicas de Cloud SQL em `us-east1`.
+  3. Velero restaura os namespaces a partir do backup replicado.
+  4. ArgoCD reconcilia manifests de aplicação.
+  5. Tráfego público é roteado para o Gateway API na Virgínia.
+  6. Toda a SolidaryTech opera de forma 100% autocontida dentro de `us-east1`.
+
+---
+
+## 4. Solução do Dilema do Terraform State
+
+### O Desafio
+No Terraform tradicional, uma réplica de leitura possui `master_instance_name = google_sql_database_instance.master.name`. Ao promover a réplica (`promote-replica`), o GCP apaga essa referência. No próximo `terraform apply`, o Terraform tentaria **destruir o banco promovido** com todos os dados da produção!
+
+### A Blindagem Implementada
+No arquivo [iac/terraform/modules/cloud_sql/main.tf](file:///iac/terraform/modules/cloud_sql/main.tf):
+```hcl
+resource "google_sql_database_instance" "replica" {
+  count                = var.enable_cross_region_replica ? 1 : 0
+  name                 = "${var.instance_name}-replica"
+  master_instance_name = google_sql_database_instance.master.name
+  region               = var.replica_region
+
+  lifecycle {
+    ignore_changes = [
+      master_instance_name,
+      settings[0].maintenance_window,
+      settings[0].disk_size
+    ]
+  }
+}
+```
+* **Resultado**: O Terraform ignora se a réplica perdeu o vínculo de replicação após a promoção. Nenhuma execução automatizada de CI/CD destruirá a base de dados de contingência.
+
+---
+
+## 5. Garantia de Zero Data Loss em In-Flight Writes (Aplicações)
+
+Durante qualquer janela de corte (*cutover*), congelamento de banco para exportação ou chaveamento de proxy, novas requisições continuam chegando dos doadores e parceiros:
+
+### 5.1. `donation-service` (Go) — Fallback para AWS SQS + Auto-Drain Worker
+* **Interceptação de Read-Only**: O serviço detecta códigos de erro PostgreSQL `57014`, `25006` ou perda transitória de socket.
+* **Buffer Durável em SQS**: A doação é serializada e gravada na fila durável **AWS SQS** com status `PENDING_BUFFERED`. O endpoint responde imediatamente `HTTP 202 Accepted` ao doador com o ID da doação gerado.
+* **Auto-Drain Worker**: A goroutine `startSQSBufferDrainWorker(ctx)` roda em background. Assim que a conexão de escrita com o banco primário volta ao normal, o worker drena automaticamente todas as doações represadas no SQS e as grava no PostgreSQL com idempotência.
+* **RPO**: **Rigorosamente 0 segundos**.
+
+### 5.2. `ngo-service` (Python) — Exponential Backoff + Retries
+* **Tratamento de Exceções**: O código captura `psycopg2.errors.ReadOnlySqlTransaction` e `psycopg2.OperationalError`.
+* **Retry Loop**: Executa até 3 tentativas com backoff exponencial (1s, 2s, 4s), expurgando conexões quebradas do pool para restabelecer o handshake com o Cloud SQL Auth Proxy.
+* **Fallback**: Durante janelas de freeze para export, responde com buffer em `HTTP 202 Accepted`.
+
+---
+
+## 6. Procedimentos Modulares de Retorno ao Padrão (Switchback)
+
+O retorno à normalidade deve ser tão granular quanto o failover, evitando desperdício de tempo e movimentações desnecessárias de dados:
+
+### 6.1. Switchback do Cenário 2 (Apenas GKE foi migrado)
+Como o banco de dados **sempre permaneceu em São Paulo**:
+1. Validar saúde e conectividade do cluster `gke-samerica`.
+2. Comutar o DNS / Gateway API de volta para o IP do Load Balancer em São Paulo.
+3. Desativar `gke-useast` no Terraform (`should_be_create = false`). Os nós nos EUA são destruídos, **zerando os custos de nós ociosos (FinOps)**.
+4. **Vantagem**: Nenhuma exportação ou importação de banco de dados é necessária!
+
+### 6.2. Switchback do Cenário 3 (Apenas Cloud SQL foi migrado)
+1. Congelar escritas na réplica de DR: `ALTER DATABASE donation_db SET default_transaction_read_only = on;` (Aplicações ativam fallback de SQS automaticamente).
+2. Exportar delta atualizado para Cloud Storage: `gcloud sql export sql sql-rhuan-*-replica gs://...`.
+3. Importar delta no banco primário em São Paulo: `gcloud sql import sql sql-rhuan-* gs://...`.
+4. Re-apontar o Secret do Cloud SQL Proxy no `gke-samerica` para São Paulo.
+5. O Auto-Drain Worker descarrega as doações represadas no SQS para o banco primário.
+
+### 6.3. Switchback do Cenário 5 (Desastre Total)
+1. Executar o Switchback de Banco (Passo 6.2).
+2. Executar o Switchback de GKE (Passo 6.1).
+3. Recriar a réplica de contingência em `us-east1` via IaC para manter o PCN ativo.
+
+---
+
+## 7. Automação 1-Click via GitHub Actions & CLI
+
+### 7.1. Workflow no GitHub Actions (`.github/workflows/disaster-recovery.yaml`)
+Disparado via `workflow_dispatch` na aba Actions do repositório:
+* **`action`**:
+  * `status`: Diagnóstico completo de saúde dos clusters e bancos.
+  * `ha-failover`: Failover zonal de banco em SP (< 60s).
+  * `cross-region-sql-failover`: Promove banco nos EUA (mantém GKE em SP).
+  * `gke-failover`: Ativa GKE nos EUA (mantém banco em SP).
+  * `full-regional-failover`: Ativa GKE + Banco nos EUA (Blackout total).
+  * `switchback-sql`: Retorna banco para SP com Zero Data Loss.
+  * `switchback-gke`: Retorna tráfego para GKE em SP e desliga nós nos EUA.
+  * `full-regional-switchback`: Retorno coordenado de tudo para SP.
+* **`dry_run`**: `true` (padrão) para simulação segura sem alteração de recursos.
+* **Segurança**: WIF (Workload Identity Federation) sem chaves estáticas e alertas automáticos no Slack (`#incidentes-sre`).
+
+### 7.2. CLI Unificado (`scripts/disaster-recovery-manager.sh`)
+```bash
+# 1. Auditoria e status completo
+bash scripts/disaster-recovery-manager.sh -a status
+
+# 2. Simular failover de GKE (Dry-Run)
+bash scripts/disaster-recovery-manager.sh -a gke-failover --dry-run
+
+# 3. Executar failover isolado de GKE
+bash scripts/disaster-recovery-manager.sh -a gke-failover
+
+# 4. Executar failover isolado de Cloud SQL
+bash scripts/disaster-recovery-manager.sh -a cross-region-sql-failover
+
+# 5. Executar failover total de desastre
+bash scripts/disaster-recovery-manager.sh -a full-regional-failover
+
+# 6. Executar switchback total
+bash scripts/disaster-recovery-manager.sh -a full-regional-switchback
 ```
 
 ---
 
-## 4. Matriz de Cenários de Desastre & Estratégia de Resposta
+---
+
+## 8. Watchdog Autônomo & Auto-Trigger via GCP Status Checker
+
+Para fechar o elo de automação e atingir **MTTD (Mean Time to Detect) e MTTR (Mean Time to Recovery) mínimos**, o **`gcp-status-checker`** foi desenhado como um **Watchdog Inteligente de Nuvem**:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                             TOPOLOGIA DE DISASTER RECOVERY MULTI-REGIÃO                          │
-├───────────────────────────────────────────────────┬──────────────────────────────────────────────┤
-│ REGIÃO PRIMÁRIA (southamerica-east1)              │ REGIÃO SECUNDÁRIA / DR (us-east1)            │
-├───────────────────────────────────────────────────┼──────────────────────────────────────────────┤
-│ • GKE Primário: gke-samerica (should_be_create=T) │ • GKE Standby: gke-useast (should_be_create=F│
-│ • Cloud SQL Master: sql-rhuan-ngo / donation      │ • Cloud SQL Replica: Cross-Region (RPO < 5s) │
-│ • Ingress / Gateway API: solidary-tech.nip.io     │ • Backup Bucket GCS: gcs-velero-bucket       │
-└───────────────────────────────────────────────────┴──────────────────────────────────────────────┘
+│              FLUXO OPERACIONAL DO WATCHDOG AUTÔNOMO (GCP STATUS CHECKER)                         │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+   1. EXECUÇÃO EXTERNA INDEPENDENTE (A cada 5 minutos no GitHub Actions)
+      └──> Roda fora do cluster GKE de São Paulo, imune a apagões regionais do GCP.
+      └──> Autentica no GCP via Workload Identity Federation (WIF).
+
+   2. VARREDURA DO FEED OFICIAL DA GOOGLE CLOUD
+      └──> Monitora 'Cloud SQL' e 'Google Kubernetes Engine' na região 'southamerica-east1'.
+
+   3. GESTÃO DE ESTADO & HYSTERESIS NO GOOGLE CLOUD STORAGE (GCS)
+      └──> Lê e grava o estado em 'gs://gcs-velero-bucket-solidary-tech-rh/gcp-status-checker-state.json'.
+      └──> REGRA DE CONFIRMAÇÃO RÁPIDA (FAST-CONFIRMATION LOOP):
+           • Em tempo de paz: checagem leve em < 5 segundos.
+           • Se detectar instabilidade na 1ª checagem: NÃO espera 15 minutos!
+             Entra em loop imediato de 2 re-verificações com intervalo de 30 segundos.
+           • Em ~65 segundos confirma 3x consecutivas a falha e dispara o Failover!
+           • No retorno ao padrão: confirma 3x a cada 30 segundos e dispara o Switchback!
+
+   4. MATRIZ DE DECISÃO CIRÚRGICA
+      ├──> Apenas Cloud SQL falhou 3x ──▶ Ação: cross-region-sql-failover
+      ├──> Apenas GKE falhou 3x       ──▶ Ação: gke-failover
+      └──> Ambos falharam 3x          ──▶ Ação: full-regional-failover
+
+   5. SEGURANÇA SRE & DISPATCH DE AÇÃO
+      ├──> Modo Automático (AUTO_TRIGGER_DR=true & REQUIRE_MANUAL_CONFIRMATION=false):
+      │    Dispara a REST API do GitHub Actions (workflow_dispatch) e notifica o Slack.
+      └──> Modo com Validação Manual (Padrão de Segurança):
+           Dispara card de ALERTA CRÍTICO no Slack com link de 1-clique para aprovação do time On-Call.
 ```
 
-### Cenário 1: Falha Física de Pods ou Nós do Kubernetes (GKE)
-* **Causa Provável**: Esgotamento de memória do nó, falha de hardware na zona de disponibilidade do GCP.
-* **Estratégia de Mitigação**:
-  - `PodDisruptionBudget (PDB)` configurado com `minAvailable: 1` para garantir disponibilidade ininterrupta durante drenagem de nós.
-  - `TopologySpreadConstraints` distribuindo réplicas entre diferentes zonas (`southamerica-east1-a`, `b`, `c`).
-  - `HorizontalPodAutoscaler (HPA)` e `KEDA` escalonando réplicas automaticamente com base em CPU e tamanho da fila SQS.
-* **RTO**: **0 segundos** (Zero Downtime para o usuário final).
-* **RPO**: **0 segundos**.
+### 8.1. Por que o Watchdog roda no GitHub Actions e não no Kubernetes?
+* **O Risco Clássico de SRE**: Se o `gcp-status-checker` rodasse dentro do GKE em São Paulo e o próprio cluster sofresse um colapso, o container morreria junto com o cluster e nunca conseguiria avisar ninguém.
+* **A Arquitetura Adotada**: O workflow `.github/workflows/gcp-status-checker.yaml` executa em runners geograficamente independentes do GitHub Actions. Mesmo que a América do Sul fique 100% inacessível, o watchdog detecta o status oficial da GCP e orquestra a contingência nos EUA.
 
-### Cenário 2: Corrupção Lógica de Aplicação ou Namespace Deletado por Engano
-* **Causa Provável**: Erro humano na exclusão de um namespace ou falha de migração de banco de dados.
-* **Estratégia de Mitigação**:
-  - Restauração pontual de manifests e Persistent Volumes através do **Velero**:
-    ```bash
-    velero backup create backup-solidary-daily --include-namespaces donation-ns,ngo-ns,volunteer-ns
-    velero restore create --from-backup backup-solidary-daily
-    ```
-* **RTO**: **$< 5$ minutos**.
-* **RPO**: **$< 1$ hora** (frequência do agendamento de snapshots do Velero).
+### 8.2. Parâmetros de Configuração do Watchdog
 
-### Cenário 3: Queda da Instância Primária do Cloud SQL Master
-* **Causa Provável**: Falha de infraestrutura no datacenter regional do Cloud SQL em São Paulo.
-* **Estratégia de Mitigação**:
-  - O banco de dados possui réplica de leitura cross-region provisionada em `us-east1` (`enable_cross_region_replica = true`).
-  - Execução do comando de promoção imediata da réplica para Master:
-    ```bash
-    gcloud sql instances promote-replica sql-rhuan-donation-replica --project=ces-igniteprogram
-    ```
-* **RTO**: **$< 2$ minutos**.
-* **RPO**: **$< 5$ segundos** (tempo de sincronização assíncrona contínua do WAL do PostgreSQL).
-
-### Cenário 4: Desastre Regional Completo (Blackout na América do Sul)
-* **Causa Provável**: Indisponibilidade total de conectividade ou falha sistêmica na região `southamerica-east1`.
-* **Estratégia de Mitigação (Infraestrutura Ativo-Passivo Warm Standby)**:
-  1. Alterar a variável de controle no Terraform (`iac/terraform/terraform.tfvars`):
-     ```hcl
-     gke = {
-       southamerica = { cluster_name = "gke-samerica", should_be_create = false }
-       useast       = { cluster_name = "gke-useast",   should_be_create = true } # Ativação sob demanda
-     }
-     ```
-  2. Executar `terraform apply` para subir o cluster `gke-useast` na sub-rede `subnet-gke-us`.
-  3. O **ArgoCD** reconcilia automaticamente todo o ecossistema de microsserviços a partir do repositório Git.
-  4. Promover a réplica do Cloud SQL em `us-east1`.
-* **RTO**: **$< 8$ minutos**.
-* **RPO**: **$< 5$ segundos**.
+| Variável de Ambiente | Descrição | Padrão |
+| :--- | :--- | :--- |
+| `FAST_CONFIRMATION_ENABLED` | Ativa re-verificações imediatas no mesmo job ao detectar anomalia | `true` |
+| `FAST_CONFIRMATION_INTERVAL_SECONDS` | Intervalo de espera entre as 3 confirmações rápidas | `30` segundos |
+| `CONSECUTIVE_OUTAGE_THRESHOLD` | Quantidade de verificações com falha antes de decidir por failover | `3` |
+| `CONSECUTIVE_HEALTHY_THRESHOLD` | Quantidade de verificações estáveis antes de autorizar o switchback | `3` |
+| `AUTO_TRIGGER_DR` | Se `true`, aciona a pipeline de DR sem esperar aprovação | `false` (Segurança) |
+| `REQUIRE_MANUAL_CONFIRMATION` | Exige validação humana do operador via link no Slack | `true` |
+| `GCS_STATE_BUCKET` | Bucket Cloud Storage para persistir o histórico de estados | `gcs-velero-bucket-solidary-tech-rh` |
+| `GCS_STATE_FILE` | Nome do arquivo JSON de estado no GCS | `gcp-status-checker-state.json` |
 
 ---
 
-## 5. Estrutura de Gestão de Crise & Comunicação (ITSM)
+## 9. Governança e Auditoria
 
-1. **Detecção e Alerta**: O AIOps Engine identifica a anomalia via telemetria e dispara notificação no canal `#incidentes-sre` do Slack.
-2. **Declaração de Incidente Maior**: O Tech Lead On-Call avalia o impacto e, se a indisponibilidade ultrapassar 5 minutos, convoca a sala de crise.
-3. **Comunicação aos Stakeholders**:
-   - Status Page atualizada a cada 15 minutos.
-   - Mensagem direcionada às diretorias das ONGs afetadas.
-4. **Resolução e Post-Mortem**:
-   - Assim que o Health Score retornar a 100/100, o AIOps Engine gera o relatório de Post-Mortem automaticamente no Slack com o MTTR consolidado e as ações corretivas.
-
----
-
-## 6. Procedimento de Teste Periódico de DR
-
-Para validar a prontidão do PCN, executa-se semestralmente o script de teste de caos e Disaster Recovery:
-```bash
-./scripts/test-disaster-recovery.sh
-```
-O teste valida a replicação de banco de dados, o estado dos backups no bucket `gcs-velero-bucket-solidary-tech-rh` e a saúde dos nós do GKE.\n
+1. **Game Days Regulares**: Simulações controladas semestrais utilizando o CLI com `--dry-run` e injeção de falhas em staging.
+2. **Rastreabilidade**: Todos os eventos de failover e switchback são logados no Cloud Audit Logs e no histórico de execuções do GitHub Actions.
+3. **Conformidade**: Aderente aos padrões de resiliência ISO 22301 e aos preceitos de disponibilidade contínua e integridade da LGPD.

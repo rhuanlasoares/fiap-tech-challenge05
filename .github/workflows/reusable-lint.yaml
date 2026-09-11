@@ -98,15 +98,6 @@ jobs:
           gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
           github-token: "${{ secrets.TOKEN }}"
           output-file: "issue-lint-go.md"
-      # Cria ou atualiza a Issue com o resumo das correções de lint do Go
-      # - name: Create or Update Issue — Lint (Go)
-      #   if: always()
-      #   uses: peter-evans/create-issue-from-file@v5
-      #   with:
-      #     title: '[Lint][Go] Correções automáticas em ${{ inputs.service_path }}'
-      #     content-filepath: issue-lint-go.md
-      #     labels: lint, go, code-quality
-      #     token: ${{ secrets.TOKEN }}
           
   lint-python:
     if: inputs.language == 'python'
@@ -188,11 +179,3 @@ jobs:
           gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
           github-token: "${{ secrets.TOKEN }}"
           output-file: "issue-lint-python.md"
-      # - name: Create or Update Issue — Lint (Python)
-      #   if: always()
-      #   uses: peter-evans/create-issue-from-file@v5
-      #   with:
-      #     title: '[Lint][Python] Correções automáticas em ${{ inputs.service_path }}'
-      #     content-filepath: issue-lint-python.md
-      #     labels: lint, python, code-quality
-      #     token: ${{ secrets.TOKEN }}
