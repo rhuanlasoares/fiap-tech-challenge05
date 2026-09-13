@@ -7,7 +7,7 @@ metadata:
 spec:
   template:
     spec:
-      serviceAccountName: sa-job-secrets
+      serviceAccountName: sa-gke
       restartPolicy: OnFailure
       initContainers:
         - name: wait-for-namespaces
@@ -43,7 +43,6 @@ spec:
               DONATION_DB_SECRET_MANAGER=$(gcloud secrets versions access latest --secret=$DONATION_DB_SECRET_MANAGER)
               AWS_KEY_ID=$(gcloud secrets versions access latest --secret=$NAME_SM_ACCESS_KEY_ID)
               AWS_SECRET=$(gcloud secrets versions access latest --secret=$NAME_SM_SECRET_ACCESS_KEY)
-              AWS_TOKEN=$(gcloud secrets versions access latest --secret=$NAME_SM_SESSION_TOKEN)
               SQS_URL=$(gcloud secrets versions access latest --secret=$NAME_SM_SQS_QUEUE_URL)
               NEW_RELIC_APIKEY=$(gcloud secrets versions access latest --secret=$NEW_RELIC_APIKEY)
               GEMINI_API_KEY=$(gcloud secrets versions access latest --secret=$GEMINI_API_KEY)
@@ -55,7 +54,6 @@ spec:
                 --from-literal=DATABASE_URL="postgres://$DB_USER:$DONATION_DB_SECRET_MANAGER@127.0.0.1:$DB_PORT/$DB_DONATION_NAME?sslmode=disable" \
                 --from-literal=AWS_ACCESS_KEY_ID="$AWS_KEY_ID" \
                 --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET" \
-                --from-literal=AWS_SESSION_TOKEN="$AWS_TOKEN" \
                 --from-literal=AWS_SQS_QUEUE_URL="$SQS_URL" \
                 --from-literal=NEW_RELIC_APIKEY="$NEW_RELIC_APIKEY"
               echo "🔐 Donation Secrets criados com sucesso!"
@@ -69,7 +67,6 @@ spec:
               kubectl create secret generic volunteer-secrets-job -n volunteer-ns \
                 --from-literal=AWS_ACCESS_KEY_ID="$AWS_KEY_ID" \
                 --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET" \
-                --from-literal=AWS_SESSION_TOKEN="$AWS_TOKEN" \
                 --from-literal=NEW_RELIC_APIKEY="$NEW_RELIC_APIKEY"
               echo "🔐 Volunteer Secrets criados com sucesso!"
 
@@ -134,11 +131,6 @@ spec:
                 secretKeyRef:
                   name: job-secrets
                   key: NAME_SM_SECRET_ACCESS_KEY
-            - name: NAME_SM_SESSION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: job-secrets
-                  key: NAME_SM_SESSION_TOKEN
             - name: NAME_SM_SQS_QUEUE_URL
               valueFrom:
                 secretKeyRef:

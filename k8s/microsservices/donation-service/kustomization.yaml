@@ -14,6 +14,7 @@ resources:
 - secret.yaml
 - service_account.yaml
 - service.yaml
+- trigger_authentication.yaml
 
 labels:
 - includeSelectors: true

@@ -9,12 +9,6 @@
       debug:
         msg: "Aplicando manifestos de {{ base_path }}/aiops/"
 
-    - name: Aplicar Namespace do AIOps
-      ansible.builtin.command:
-        kubectl apply -f {{ base_path }}/namespaces/aiops.yaml
-      register: output1
-      ignore_errors: yes
-
     - name: Aplicar Manifestos do AIOps via Kustomize (Rollout, Service, RBAC, HealthCheck)
       ansible.builtin.command:
         kubectl apply -k {{ base_path }}/aiops/

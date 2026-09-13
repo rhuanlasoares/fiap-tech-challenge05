@@ -17,7 +17,7 @@ spec:
       authenticationRef:
         name: donation-trigger
       metadata:
-        queueURL: https://sqs.us-east-1.amazonaws.com/190170155286/solidary-tech
+        queueURL: https://sqs.us-east-1.amazonaws.com/931228356694/solidary-tech
         queueLength: "10"
         awsRegion: "us-east-1"
 

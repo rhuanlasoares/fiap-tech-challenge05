@@ -1,0 +1,210 @@
+### General Variables
+project_id     = "naconfeitaria"
+project_number = "123456789012"
+region         = "southamerica-east1"
+zone           = "southamerica-east1-a"
+
+### APIs Module Variables
+services_apis_list = [
+  "compute.googleapis.com",
+  "container.googleapis.com",
+  "sqladmin.googleapis.com",
+  "servicenetworking.googleapis.com",
+  "storage.googleapis.com",
+  "storage-component.googleapis.com",
+  "secretmanager.googleapis.com",
+  "artifactregistry.googleapis.com",
+  "iam.googleapis.com",
+  "iamcredentials.googleapis.com",
+  "cloudresourcemanager.googleapis.com",
+  "sts.googleapis.com",
+  "monitoring.googleapis.com",
+  "logging.googleapis.com",
+  "generativelanguage.googleapis.com",
+  "serviceusage.googleapis.com"
+]
+
+### Bucket Module Variables
+buckets = {
+  "loki" = {
+    bucket_name = "gcs-loki-bucket-solidary-tech-rh"
+    labels_bucket = {
+      environment = "production"
+      service     = "loki"
+      managed_by  = "terraform"
+    }
+  },
+  "velero" = {
+    bucket_name = "gcs-velero-bucket-solidary-tech-rh"
+    labels_bucket = {
+      environment = "production"
+      service     = "velero"
+      managed_by  = "terraform"
+    }
+  }
+}
+
+### Service Account Module Variables
+service_accounts = {
+  "sa-gke-fiap" = "GKE Service Account para Workload Identity"
+}
+
+sa_wifederation_email = "sa-gke-fiap@naconfeitaria.iam.gserviceaccount.com"
+
+### VPC Module Variables
+vpc_name    = "vpc-rhuan"
+router_name = "router-rhuan"
+nat_name    = "nat-rhuan"
+psa_name    = "psa-rhuan"
+
+subnets = {
+  "southamerica" = {
+    name                   = "subnet-gke-sa"
+    region                 = "southamerica-east1"
+    ip_cidr_range          = "10.0.0.0/24"
+    range_name_pods        = "pods-subnet-sa"
+    ip_cidr_range_pods     = "10.1.0.0/16"
+    range_name_services    = "services-subnet-sa"
+    ip_cidr_range_services = "10.2.0.0/20"
+  },
+  "useast" = {
+    name                   = "subnet-gke-us"
+    region                 = "us-east1"
+    ip_cidr_range          = "10.4.0.0/24"
+    range_name_pods        = "pods-subnet-us"
+    ip_cidr_range_pods     = "10.5.0.0/16"
+    range_name_services    = "services-subnet-us"
+    ip_cidr_range_services = "10.6.0.0/20"
+  }
+}
+
+### Cloud SQL Module Variables
+database_version            = "POSTGRES_14"
+enable_cross_region_replica = true
+replica_region              = "us-east1"
+instance_labels = {
+  environment = "production"
+  managed_by  = "terraform"
+  project     = "solidary-tech"
+}
+
+cloud_sql = {
+  "ngo-service" = {
+    database_version        = "POSTGRES_14"
+    instance_tier           = "db-custom-2-7680"
+    cloud_sql_instance_name = "sql-rhuan-ngo"
+    database_name           = "ngodb"
+    username                = "postgres"
+    instance_labels = {
+      environment = "production"
+      service     = "ngo-service"
+      managed_by  = "terraform"
+    }
+    password = {
+      secret_id   = "sm-ngo-service-db-password"
+      secret_data = "ChangeMeNgo123!"
+    }
+  },
+  "donation-service" = {
+    database_version        = "POSTGRES_14"
+    instance_tier           = "db-custom-2-7680"
+    cloud_sql_instance_name = "sql-rhuan-donation"
+    database_name           = "donationdb"
+    username                = "postgres"
+    instance_labels = {
+      environment = "production"
+      service     = "donation-service"
+      managed_by  = "terraform"
+    }
+    password = {
+      secret_id   = "sm-donation-service-db-password"
+      secret_data = "ChangeMeDonation123!"
+    }
+  }
+}
+
+### GKE Module Variables
+gke = {
+  "southamerica" = {
+    cluster_name     = "gke-samerica"
+    region           = "southamerica-east1"
+    should_be_create = true
+  },
+  "useast" = {
+    cluster_name     = "gke-useast"
+    region           = "us-east1"
+    should_be_create = false
+  }
+}
+
+gke_resource_labels = {
+  environment = "production"
+  project     = "solidary-tech"
+  team        = "sre"
+  managed_by  = "terraform"
+}
+
+sa_inside_gke = "sa-gke"
+
+### Artifact Registry Module Variables
+artreg = {
+  "ngo" = {
+    name_artreg = "artreg-ngo-sa"
+    description = "Docker repository for NGO service"
+    region      = "southamerica-east1"
+  },
+  "donation" = {
+    name_artreg = "artreg-donation-sa"
+    description = "Docker repository for Donation service"
+    region      = "southamerica-east1"
+  },
+  "volunteer" = {
+    name_artreg = "artreg-volunteer-sa"
+    description = "Docker repository for Volunteer service"
+    region      = "southamerica-east1"
+  },
+  "status" = {
+    name_artreg = "artreg-status"
+    description = "Docker repository for Status Checker"
+    region      = "southamerica-east1"
+  },
+  "aiops" = {
+    name_artreg = "artreg-aiops"
+    description = "Docker repository for AIOps Engine"
+    region      = "southamerica-east1"
+  }
+}
+
+### Secret Manager / External Secrets
+aws_access_key_id = {
+  secret_id   = "sm-aws-access-key-id"
+  secret_data = "AKIAEXAMPLEKEY12345"
+}
+
+aws_secret_access_key = {
+  secret_id   = "sm-aws-secret-access-key"
+  secret_data = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+}
+
+
+new_relic_api_key = {
+  secret_id   = "sm-new-relic-api-key"
+  secret_data = "NRAK-EXAMPLEKEY123456789"
+}
+
+gemini_api_key = {
+  secret_id   = "sm-gemini-api-key"
+  secret_data = "AIzaSyEXAMPLEKEY123456789"
+}
+
+webhook_slack = {
+  secret_id   = "sm-webhook-slack"
+  secret_data = "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+}
+
+### Workload Identity Federation (GitHub Actions)
+workload_identity_pool_id          = "github-actions-pool"
+display_name_wip                   = "GitHub Actions Pool"
+workload_identity_pool_provider_id = "github-actions-provider"
+display_name_wip_provider          = "GitHub Actions Provider"
+owner_and_repository               = "rhuanlasoares/fiap-tech-challenge05"

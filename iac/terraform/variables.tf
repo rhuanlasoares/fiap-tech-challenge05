@@ -40,11 +40,6 @@ variable "service_accounts" {
   description = "The Account ID and the Display Name of the Service Accounts."
 }
 
-variable "sa_wifederation_email" {
-  type        = string
-  description = "Email of the Service Account used for Workload Identity Federation."
-}
-
 ### VPC Module Variables
 
 variable "vpc_name" {
@@ -166,13 +161,6 @@ variable "aws_secret_access_key" {
   sensitive = true
 }
 
-variable "aws_session_token" {
-  type = object({
-    secret_id   = string
-    secret_data = string
-  })
-  sensitive = true
-}
 
 variable "new_relic_api_key" {
   type = object({

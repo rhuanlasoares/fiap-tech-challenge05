@@ -38,25 +38,6 @@ resource "google_secret_manager_secret_version" "aws_secret_access_key_version" 
   secret_data = var.aws_secret_access_key["secret_data"]
 }
 
-resource "google_secret_manager_secret" "aws_session_token" {
-  project   = var.project_id
-  secret_id = var.aws_session_token["secret_id"]
-
-  replication {
-    user_managed {
-      replicas {
-        location = var.region
-      }
-    }
-  }
-
-  deletion_protection = false
-}
-
-resource "google_secret_manager_secret_version" "aws_session_token_version" {
-  secret      = google_secret_manager_secret.aws_session_token.id
-  secret_data = var.aws_session_token["secret_data"]
-}
 
 resource "google_secret_manager_secret" "ngo_password" {
   project   = var.project_id

@@ -24,7 +24,7 @@ spec:
       labels:
         app: aiops-engine
     spec:
-      serviceAccountName: aiops-sa
+      serviceAccountName: sa-gke
       terminationGracePeriodSeconds: 30
       containers:
       - name: aiops-engine

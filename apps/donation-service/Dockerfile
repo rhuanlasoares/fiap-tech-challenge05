@@ -17,6 +17,6 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=builder /app/donation-service /app/donation-service
 
-USER nonroot:nonroot
+USER 65532:65532
 EXPOSE 8082
 ENTRYPOINT ["/app/donation-service"]

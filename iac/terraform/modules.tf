@@ -79,7 +79,6 @@ module "secret_manager" {
   region                = var.region
   aws_access_key_id     = var.aws_access_key_id
   aws_secret_access_key = var.aws_secret_access_key
-  aws_session_token     = var.aws_session_token
   ngo_secret            = var.cloud_sql["ngo-service"].password
   donation_secret       = var.cloud_sql["donation-service"].password
   sm_sqs_queue_url      = local.sqs_queue_url
@@ -109,7 +108,6 @@ module "iam" {
   secrets = {
     aws_access_key_id     = var.aws_access_key_id
     aws_secret_access_key = var.aws_secret_access_key
-    aws_session_token     = var.aws_session_token
     ngo_secret            = var.cloud_sql["ngo-service"].password
     donation_secret       = var.cloud_sql["donation-service"].password
     sm_sqs_queue_url      = local.sqs_queue_url

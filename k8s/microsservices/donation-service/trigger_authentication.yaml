@@ -1,0 +1,14 @@
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: donation-trigger
+  namespace: donation-ns
+spec:
+  secretTargetRef:
+  - parameter: awsAccessKeyID
+    name: donation-secrets-job
+    key: AWS_ACCESS_KEY_ID
+  - parameter: awsSecretAccessKey
+    name: donation-secrets-job
+    key: AWS_SECRET_ACCESS_KEY

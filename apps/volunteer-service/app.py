@@ -7,6 +7,68 @@ import uuid
 import boto3
 from flask import Flask, jsonify, request
 
+
+def setup_logging(service_name: str, service_namespace: str) -> logging.Logger:
+    """Configura logging local e exporter OpenTelemetry para envio ao Loki."""
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    if not root_logger.handlers:
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        root_logger.addHandler(stream_handler)
+
+    otel_endpoint = os.getenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317",
+    )
+    insecure = os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() != "false"
+
+    try:
+        from opentelemetry._logs import set_logger_provider
+        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
+            OTLPLogExporter,
+        )
+        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+        from opentelemetry.sdk.resources import Resource
+
+        resource = Resource.create(
+            {
+                "service.name": os.getenv("OTEL_SERVICE_NAME", service_name),
+                "service.namespace": service_namespace,
+                "deployment.environment": os.getenv("ENVIRONMENT", "production"),
+            }
+        )
+
+        logger_provider = LoggerProvider(resource=resource)
+        set_logger_provider(logger_provider)
+
+        exporter = OTLPLogExporter(endpoint=otel_endpoint, insecure=insecure)
+        logger_provider.add_log_record_processor(
+            BatchLogRecordProcessor(exporter)
+        )
+
+        has_otel = any(isinstance(h, LoggingHandler) for h in root_logger.handlers)
+        if not has_otel:
+            otel_handler = LoggingHandler(
+                level=logging.INFO, logger_provider=logger_provider
+            )
+            root_logger.addHandler(otel_handler)
+        root_logger.info(
+            "OpenTelemetry logging inicializado para %s -> %s",
+            service_name,
+            otel_endpoint,
+        )
+    except Exception as exc:
+        root_logger.warning(
+            "Falha ao inicializar OpenTelemetry logging: %s", exc
+        )
+
+    return root_logger
+
+
 # Inicialização do New Relic Agent com suporte a AI Monitoring (AIM)
 try:
     import newrelic.agent
@@ -14,13 +76,10 @@ try:
     newrelic.agent.initialize()
 except Exception as nr_err:
     logging.getLogger(__name__).warning(
-        f"New Relic initialization skipped or failed: {nr_err}"
+        "New Relic initialization skipped or failed: %s", nr_err
     )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-log = logging.getLogger(__name__)
+log = setup_logging("volunteer-service", "volunteer-ns")
 
 app = Flask(__name__)
 
@@ -40,9 +99,9 @@ try:
     else:
         dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(DYNAMODB_TABLE)
-    log.info(f"Conectado à tabela DynamoDB: {DYNAMODB_TABLE}")
+    log.info("Conectado à tabela DynamoDB: %s", DYNAMODB_TABLE)
 except Exception as e:
-    log.critical(f"Falha ao conectar no DynamoDB: {e}")
+    log.critical("Falha ao conectar no DynamoDB: %s", e)
     sys.exit(1)
 
 
@@ -82,7 +141,7 @@ def register_volunteer():
         table.put_item(Item=item)
         return jsonify(item), 201
     except Exception as e:
-        log.error(f"Erro ao salvar voluntário no DynamoDB: {e}")
+        log.error("Erro ao salvar voluntário no DynamoDB: %s", e)
         return jsonify({"error": "Erro interno ao processar dados"}), 500
 
 
@@ -97,7 +156,7 @@ def get_volunteers_by_ngo(ngo_id):
         )
         return jsonify(response.get("Items", [])), 200
     except Exception as e:
-        log.error(f"Erro ao buscar dados no DynamoDB: {e}")
+        log.error("Erro ao buscar dados no DynamoDB: %s", e)
         return jsonify({"error": "Erro interno"}), 500
 
 
@@ -108,5 +167,5 @@ def error():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8083))
+    port = int(os.getenv("PORT", "8083"))
     app.run(host="0.0.0.0", port=port)

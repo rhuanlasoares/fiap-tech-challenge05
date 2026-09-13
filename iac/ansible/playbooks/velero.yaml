@@ -9,6 +9,12 @@
       debug:
         msg: "Aplicando manifestos de {{ base_path }}"
 
+    - name: Aplicar ServiceAccount do Velero com Workload Identity
+      ansible.builtin.command:
+        kubectl apply -f {{ base_path }}/velero/service_account.yaml
+      register: output_sa
+      ignore_errors: yes
+
     - name: Add Velero Helm Repo
       ansible.builtin.command:
         helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts

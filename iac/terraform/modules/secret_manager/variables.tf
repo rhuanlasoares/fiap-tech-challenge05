@@ -24,13 +24,6 @@ variable "aws_secret_access_key" {
   sensitive = true
 }
 
-variable "aws_session_token" {
-  type = object({
-    secret_id   = string
-    secret_data = string
-  })
-  sensitive = true
-}
 
 variable "donation_secret" {
   type = object({

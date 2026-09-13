@@ -9,9 +9,9 @@ loki:
   storage:
     type: gcs
     bucketNames:
-      chunks: gcs-loki-bucket-01
-      ruler: gcs-loki-bucket-01
-      admin: gcs-loki-bucket-01
+      chunks: gcs-loki-bucket-solidary-tech-rh
+      ruler: gcs-loki-bucket-solidary-tech-rh
+      admin: gcs-loki-bucket-solidary-tech-rh
     gcs:
       chunkBufferSize: 0
       requestTimeout: "0s"
