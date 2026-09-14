@@ -2,10 +2,10 @@ name: 'AI Issue Analyzer with Gemini'
 description: 'Analisa relatórios de segurança e lint com Google AI Studio (Gemini) e cria issues acionáveis somente quando necessário.'
 inputs:
   scan-type:
-    description: 'Tipo de scan: lint, sca, sast, container'
+    description: 'Tipo de scan: lint, sca, sast, container, dast'
     required: true
   tool-name:
-    description: 'Nome da ferramenta (ex: Trivy, Gosec, Lint Go)'
+    description: 'Nome da ferramenta (ex: Trivy, Gosec, Lint Go, OWASP ZAP)'
     required: true
   report-file:
     description: 'Arquivo de relatório (JSON, SARIF, log ou diff)'
@@ -37,6 +37,10 @@ inputs:
     description: 'Modelo Gemini a ser utilizado'
     required: false
     default: 'gemini-3.6-flash-lite'
+  language:
+    description: 'Idioma para os relatórios, resumos e issues geradas (ex: pt-BR, en-US)'
+    required: false
+    default: 'pt-BR'
 
 outputs:
   create-issue:
@@ -64,7 +68,8 @@ runs:
           --service-name "${{ inputs.service-name }}" \
           --service-path "${{ inputs.service-path }}" \
           --output-file "${{ inputs.output-file }}" \
-          --model "${{ inputs.model }}"
+          --model "${{ inputs.model }}" \
+          --language "${{ inputs.language }}"
 
     - name: 'Criar ou Atualizar Issue no GitHub'
       if: steps.analyze.outputs.create_issue == 'true'

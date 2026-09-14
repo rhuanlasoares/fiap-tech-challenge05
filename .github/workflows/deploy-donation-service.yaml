@@ -91,6 +91,7 @@ jobs:
       scan_mode: "api"
       openapi_file: "apps/donation-service/openapi.yaml"
       block_on_critical: false
+      language: "pt-BR"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

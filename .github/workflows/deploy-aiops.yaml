@@ -91,6 +91,7 @@ jobs:
       scan_mode: "api"
       openapi_file: "http://127.0.0.1:8000/openapi.json"
       block_on_critical: false
+      language: "pt-BR"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

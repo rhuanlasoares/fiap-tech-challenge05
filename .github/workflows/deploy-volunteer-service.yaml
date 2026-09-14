@@ -86,11 +86,12 @@ jobs:
       service_name: volunteer-service
       image_name: volunteer-service
       image_tag: ${{ github.sha }}
-      port: "8081"
+      port: "8083"
       health_endpoint: "/health"
       scan_mode: "api"
       openapi_file: "apps/volunteer-service/openapi.yaml"
       block_on_critical: false
+      language: "pt-BR"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

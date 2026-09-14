@@ -3,6 +3,7 @@
 AI Issue Analyzer for GitHub Actions
 Analisa relatórios de segurança (SCA, SAST, Container, DAST) e Lint utilizando
 Google AI Studio (Gemini) para decidir com inteligência se uma Issue é necessária.
+Garante suporte a múltiplos idiomas, com Português do Brasil (pt-BR) como padrão.
 """
 
 import argparse
@@ -29,7 +30,7 @@ def set_github_output(name: str, value: str):
     print(f"[ai-issue-analyzer] Output: {name}={value}")
 
 
-def auto_close_existing_issue(service_name: str, scan_type: str, tool_name: str, token: str):
+def auto_close_existing_issue(service_name: str, scan_type: str, tool_name: str, token: str, language: str = "pt-BR"):
     """Fecha automaticamente issues abertas que foram resolvidas nesta execução."""
     if not token:
         return
@@ -48,12 +49,23 @@ def auto_close_existing_issue(service_name: str, scan_type: str, tool_name: str,
                 num = issue.get("number")
                 title = issue.get("title", "")
                 commit_sha = os.getenv("GITHUB_SHA", "latest")
-                comment = (
-                    f"✅ **Problema Resolvido**\n\n"
-                    f"A verificação de pipeline `{tool_name}` (`{scan_type.upper()}`) para `{service_name}` "
-                    f"não encontrou nenhuma vulnerabilidade no commit `{commit_sha}`.\n"
-                    f"Fechando issue automaticamente via integração contínua."
-                )
+                
+                is_pt = language.lower() in ["pt-br", "pt", "portugues", "português"]
+                if is_pt:
+                    comment = (
+                        f"✅ **Problema Resolvido**\n\n"
+                        f"A verificação de pipeline `{tool_name}` (`{scan_type.upper()}`) para `{service_name}` "
+                        f"não encontrou nenhuma vulnerabilidade no commit `{commit_sha}`.\n"
+                        f"Fechando issue automaticamente via integração contínua."
+                    )
+                else:
+                    comment = (
+                        f"✅ **Issue Resolved**\n\n"
+                        f"Pipeline scan `{tool_name}` (`{scan_type.upper()}`) for `{service_name}` "
+                        f"found no remaining vulnerabilities in commit `{commit_sha}`.\n"
+                        f"Closing issue automatically via continuous integration."
+                    )
+
                 print(f"[ai-issue-analyzer] Fechando issue resolvida #{num} ('{title}')")
                 subprocess.run(
                     ["gh", "issue", "close", str(num), "--comment", comment],
@@ -250,19 +262,30 @@ def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-1.5-flash") 
     return None
 
 
-def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, findings: list) -> dict:
-    """Gera estrutura padrão caso a API do Gemini falhe."""
+def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, findings: list, language: str = "pt-BR") -> dict:
+    """Gera estrutura padrão caso a API do Gemini falhe ou não possua chave."""
     sev_counts = {f.get("severity", "LOW"): True for f in findings}
     max_sev = "CRITICAL" if "CRITICAL" in sev_counts else "HIGH" if "HIGH" in sev_counts else "MEDIUM" if "MEDIUM" in sev_counts else "LOW"
 
-    return {
-        "should_create_issue": True,
-        "max_severity": max_sev,
-        "title_summary": f"{len(findings)} achados detectados ({max_sev})",
-        "executive_summary": f"Identificados {len(findings)} achados na ferramenta {tool_name}.",
-        "findings": findings[:20],
-        "action_checklist": ["Revisar vulnerabilidades e cabeçalhos de segurança apontados", "Aplicar correções recomendadas no serviço"]
-    }
+    is_pt = language.lower() in ["pt-br", "pt", "portugues", "português"]
+    if is_pt:
+        return {
+            "should_create_issue": True,
+            "max_severity": max_sev,
+            "title_summary": f"{len(findings)} achados detectados ({max_sev})",
+            "executive_summary": f"Identificados {len(findings)} achados de segurança/qualidade na ferramenta {tool_name} para o microsserviço {service_name}.",
+            "findings": findings[:20],
+            "action_checklist": ["Revisar vulnerabilidades e cabeçalhos de segurança apontados", "Aplicar correções recomendadas no código ou configuração"]
+        }
+    else:
+        return {
+            "should_create_issue": True,
+            "max_severity": max_sev,
+            "title_summary": f"{len(findings)} findings detected ({max_sev})",
+            "executive_summary": f"Identified {len(findings)} findings in tool {tool_name} for microservice {service_name}.",
+            "findings": findings[:20],
+            "action_checklist": ["Review reported vulnerabilities and security headers", "Apply recommended fixes in service code or configuration"]
+        }
 
 
 def main():
@@ -277,47 +300,52 @@ def main():
     parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN", os.getenv("GH_TOKEN", "")))
     parser.add_argument("--output-file", default="issue-ai.md")
     parser.add_argument("--model", default="gemini-1.5-flash")
+    parser.add_argument("--language", default="pt-BR", help="Idioma para os relatórios e issues (ex: pt-BR, en-US)")
 
     args = parser.parse_args()
     service_path = args.service_path or args.service_name
     token = args.github_token
+    lang = args.language or "pt-BR"
+    is_pt = lang.lower() in ["pt-br", "pt", "portugues", "português"]
+    lang_name = "Português do Brasil (pt-BR)" if is_pt else lang
 
     findings = parse_findings(args.scan_type, args.tool_name, args.report_file, args.diff_file)
     
     if not findings:
         print("[ai-issue-analyzer] ✅ Nenhum achado relevante. Nenhuma Issue será criada.")
         set_github_output("create_issue", "false")
-        auto_close_existing_issue(args.service_name, args.scan_type, args.tool_name, token)
+        auto_close_existing_issue(args.service_name, args.scan_type, args.tool_name, token, lang)
         sys.exit(0)
 
     ai_result = None
     if args.gemini_api_key:
         prompt = f"""
-Você é um especialista em DevSecOps. Analise os achados da ferramenta '{args.tool_name}' ({args.scan_type.upper()}) para o microserviço '{args.service_name}'.
+Você é um especialista sênior em DevSecOps e AppSec. Analise os achados da ferramenta '{args.tool_name}' ({args.scan_type.upper()}) para o microsserviço '{args.service_name}'.
 Achados brutos ({len(findings)} itens): {json.dumps(findings[:25], ensure_ascii=False)}
 
-Objetivos:
-1. Avalie se os achados justificam uma Issue de engenharia ('should_create_issue').
-2. Defina a severidade máxima ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO').
-3. Crie um resumo executivo direto e técnico em português (1 parágrafo).
-4. Elabore um 'action_checklist': um array de strings com ações diretas (ex: "Configurar cabeçalho X-Content-Type-Options: nosniff", "Adicionar Content-Security-Policy", "Sanitizar entrada no endpoint /donations").
+DIRETRIZES DE RESPOSTA E IDIOMA:
+1. IDIOMA OBRIGATÓRIO: Você DEVE responder ESTRITAMENTE em {lang_name}. Todos os campos de texto no JSON ('title_summary', 'executive_summary', 'description', 'remediation', 'action_checklist') DEVEM estar em {lang_name}. Mesmo que as descrições brutas da ferramenta estejam em inglês, TRADUZA E EXPLIQUE em {lang_name}.
+2. Avalie com precisão técnica se os achados justificam a abertura de uma Issue ('should_create_issue').
+3. Defina a severidade máxima consolidada ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO').
+4. 'executive_summary': Crie um resumo executivo direto e técnico em {lang_name} (1 parágrafo claro explicando o impacto real).
+5. 'action_checklist': Forneça um array com ações diretas e imperativas em {lang_name} (ex: "Configurar cabeçalho X-Content-Type-Options: nosniff", "Definir Content-Security-Policy", "Atualizar dependência vulnerável").
 
-Responda ESTRITAMENTE neste JSON schema:
+Responda ESTRITAMENTE neste formato JSON schema:
 {{
   "should_create_issue": true,
   "max_severity": "CRITICAL",
-  "title_summary": "resumo para o título",
-  "executive_summary": "parágrafo explicativo",
+  "title_summary": "resumo conciso para o título da issue em {lang_name}",
+  "executive_summary": "resumo executivo do impacto em {lang_name}",
   "findings": [
-    {{ "id": "RULE-ID", "component": "endpoint/arquivo", "severity": "HIGH", "description": "problema", "remediation": "solução" }}
+    {{ "id": "ID-REGRA", "component": "endpoint_ou_arquivo", "severity": "HIGH", "description": "explicação do problema em {lang_name}", "remediation": "como corrigir em {lang_name}" }}
   ],
-  "action_checklist": ["Passo 1", "Passo 2"]
+  "action_checklist": ["Ação corretiva 1 em {lang_name}", "Ação corretiva 2 em {lang_name}"]
 }}
 """
         ai_result = call_gemini_api(args.gemini_api_key, prompt, args.model)
 
     if not ai_result:
-        ai_result = generate_fallback_issue(args.scan_type, args.tool_name, args.service_name, findings)
+        ai_result = generate_fallback_issue(args.scan_type, args.tool_name, args.service_name, findings, lang)
 
     if not ai_result.get("should_create_issue", True):
         print("[ai-issue-analyzer] ℹ️ Achados ignorados pela IA. Nenhuma issue será criada.")
@@ -328,31 +356,59 @@ Responda ESTRITAMENTE neste JSON schema:
     max_sev = ai_result.get("max_severity", "HIGH").upper()
     alert_type = "[!CAUTION]" if max_sev == "CRITICAL" else "[!IMPORTANT]" if max_sev == "HIGH" else "[!WARNING]"
     
-    title_summary = ai_result.get("title_summary", f"Vulnerabilidades Identificadas")
+    default_title = "Vulnerabilidades Identificadas" if is_pt else "Identified Vulnerabilities"
+    title_summary = ai_result.get("title_summary", default_title)
     labels = ["security", args.scan_type.lower(), args.tool_name.lower().replace(" ", "-"), max_sev.lower()]
     
     # Metadata do GitHub
     run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY', 'repo')}/actions/runs/{os.getenv('GITHUB_RUN_ID', 'local')}"
     commit_sha = os.getenv("GITHUB_SHA", "main")
     
-    # Geração do Markdown (Otimizado para GitHub Flavored Markdown)
+    # Geração do Markdown (Localizado para o idioma definido)
+    if is_pt:
+        header_title = f"# 🛡️ Triagem de Segurança: {args.tool_name}"
+        meta_service = f"> **Microsserviço:** `{args.service_name}` | **Severidade Máxima:** `{max_sev}`"
+        meta_origin = f"> **Origem:** [Execução da Pipeline]({run_url}) | **Commit:** `{commit_sha[:7]}`"
+        sec_summary = "## 📝 Resumo Executivo"
+        sec_checklist = "## 🛠️ Plano de Ação (Checklist)"
+        checklist_intro = "Marque as caixas abaixo conforme as correções forem aplicadas no código:"
+        sec_details = "## 🔍 Detalhamento das Vulnerabilidades"
+        table_headers = "| ID / Regra | Componente | Severidade | Ação Necessária |"
+        expand_text = "<summary><strong>📦 Expandir Descrições Técnicas Completas</strong></summary>"
+        target_label = "- **Alvo:**"
+        context_label = "- **Contexto Técnico:**"
+        footer_text = f"🤖 *Análise gerada via Google Gemini em {lang_name}. Avalie o contexto antes de aplicar mudanças estruturais.*"
+    else:
+        header_title = f"# 🛡️ Security Triage: {args.tool_name}"
+        meta_service = f"> **Microservice:** `{args.service_name}` | **Max Severity:** `{max_sev}`"
+        meta_origin = f"> **Origin:** [Pipeline Run]({run_url}) | **Commit:** `{commit_sha[:7]}`"
+        sec_summary = "## 📝 Executive Summary"
+        sec_checklist = "## 🛠️ Action Plan (Checklist)"
+        checklist_intro = "Check the boxes below as fixes are applied to the codebase:"
+        sec_details = "## 🔍 Vulnerability Breakdown"
+        table_headers = "| Rule / ID | Component | Severity | Recommended Action |"
+        expand_text = "<summary><strong>📦 Expand Detailed Descriptions</strong></summary>"
+        target_label = "- **Target:**"
+        context_label = "- **Technical Context:**"
+        footer_text = f"🤖 *Analysis generated via Google Gemini ({lang}). Review context before applying structural changes.*"
+
     md = [
         "---",
         f"title: '[{args.scan_type.upper()}][{args.service_name}] {max_sev}: {title_summary}'",
         f"labels: [{', '.join([f'\"{l}\"' for l in labels])}]",
         "---",
         "",
-        f"# 🛡️ Triagem de Segurança: {args.tool_name.capitalize()}",
+        header_title,
         "",
         f"> {alert_type}",
-        f"> **Microserviço:** `{args.service_name}` | **Severidade Máxima:** `{max_sev}`",
-        f"> **Origem:** [Pipeline Run]({run_url}) | **Commit:** `{commit_sha[:7]}`",
+        meta_service,
+        meta_origin,
         "",
-        "## 📝 Resumo Executivo",
-        ai_result.get("executive_summary", "Problemas identificados durante o fluxo de CI/CD."),
+        sec_summary,
+        ai_result.get("executive_summary", "Problemas identificados durante a esteira de CI/CD."),
         "",
-        "## 🛠️ Plano de Ação (Checklist)",
-        "Marque as caixas abaixo conforme as correções forem aplicadas no código:"
+        sec_checklist,
+        checklist_intro
     ]
 
     for task in ai_result.get("action_checklist", []):
@@ -360,9 +416,9 @@ Responda ESTRITAMENTE neste JSON schema:
 
     md.extend([
         "",
-        "## 🔍 Detalhamento das Vulnerabilidades",
+        sec_details,
         "",
-        "| ID / Regra | Componente | Severidade | Ação Necessária |",
+        table_headers,
         "|---|---|---|---|"
     ])
 
@@ -376,15 +432,15 @@ Responda ESTRITAMENTE neste JSON schema:
     md.extend([
         "",
         "<details>",
-        "<summary><strong>📦 Expandir Descrições Técnicas Completas</strong></summary>",
+        expand_text,
         ""
     ])
 
     for f in ai_result.get("findings", []):
         md.extend([
             f"### 🔸 {f.get('id')} ({f.get('severity')})",
-            f"- **Alvo:** `{f.get('component')}`",
-            f"- **Contexto Técnico:** {f.get('description')}",
+            f"{target_label} `{f.get('component')}`",
+            f"{context_label} {f.get('description')}",
             ""
         ])
 
@@ -392,7 +448,7 @@ Responda ESTRITAMENTE neste JSON schema:
         "</details>",
         "",
         "---",
-        "🤖 *Análise gerada via Google Gemini. Avalie o contexto antes de aplicar mudanças estruturais.*"
+        footer_text
     ])
 
     with open(args.output_file, "w", encoding="utf-8") as out_f:

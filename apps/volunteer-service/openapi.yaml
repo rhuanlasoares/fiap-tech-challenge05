@@ -4,7 +4,7 @@ info:
   description: Microsserviço de gestão de voluntários do SolidaryTech
   version: 1.0.0
 servers:
-  - url: http://localhost:8081
+  - url: http://localhost:8083
     description: Local / CI Runner
 paths:
   /health:

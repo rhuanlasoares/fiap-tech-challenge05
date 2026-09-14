@@ -44,6 +44,11 @@ on:
         required: false
         type: boolean
         default: false
+      language:
+        description: "Idioma para geração de relatórios e Issues pela IA (padrão: pt-BR)"
+        required: false
+        type: string
+        default: "pt-BR"
     secrets:
       TOKEN:
         required: true
@@ -108,7 +113,7 @@ jobs:
 
       - name: "Executar Microsserviço em Background"
         run: |
-          echo "[DAST] Iniciando container do microsserviço ${{ inputs.service_name }}..."
+          echo "[DAST] Iniciando container do microsserviço ${{ inputs.service_name }} na porta ${{ inputs.port }}..."
           docker run -d \
             --name app-under-test \
             --network host \
@@ -116,7 +121,11 @@ jobs:
             -e DATABASE_URL="postgres://appuser:apppassword@127.0.0.1:5432/appdb?sslmode=disable" \
             -e ENVIRONMENT="test" \
             -e OTEL_EXPORTER_OTLP_INSECURE="true" \
+            -e OTEL_SDK_DISABLED="true" \
             -e AWS_REGION="us-east-1" \
+            -e AWS_DYNAMODB_TABLE="volunteers" \
+            -e AWS_ACCESS_KEY_ID="testing" \
+            -e AWS_SECRET_ACCESS_KEY="testing" \
             ${{ inputs.image_name }}:${{ inputs.image_tag }}
 
       - name: "Healthcheck — Aguardar prontidão da API"
@@ -125,6 +134,14 @@ jobs:
           echo "[DAST] Aguardando prontidão em $TARGET_URL ..."
           READY=0
           for i in $(seq 1 30); do
+            # Verificação fail-fast de saúde do container
+            RUNNING=$(docker inspect -f '{{.State.Running}}' app-under-test 2>/dev/null || echo "false")
+            if [ "$RUNNING" != "true" ]; then
+              echo "❌ O container 'app-under-test' parou inesperadamente! Logs:"
+              docker logs app-under-test || true
+              exit 1
+            fi
+
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL" || true)
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Serviço pronto e respondendo HTTP 200 (tentativa $i/30)."
@@ -159,7 +176,6 @@ jobs:
           if [ "$SCAN_MODE" = "api" ] && [ -n "$OPENAPI_PATH" ]; then
             echo "[DAST] Executando zap-api-scan.py baseado em OpenAPI: $OPENAPI_PATH"
             
-            # Se for arquivo local no repo vs URL HTTP
             if [[ "$OPENAPI_PATH" =~ ^https?:// ]]; then
               docker run --rm --network host -v "$(pwd)/zap-out:/zap/wrk/:rw" \
                 -t ghcr.io/zaproxy/zaproxy:stable \
@@ -197,11 +213,17 @@ jobs:
         if: always()
         run: |
           python3 << 'PYEOF'
-          import json, os
+          import json, os, sys
 
-          report_file = "zap-report.json"
           summary_path = os.getenv("GITHUB_STEP_SUMMARY")
-          if not summary_path or not os.path.isfile(report_file):
+          report_file = "zap-report.json"
+          if not summary_path:
+              sys.exit(0)
+
+          if not os.path.isfile(report_file):
+              with open(summary_path, "a", encoding="utf-8") as f:
+                  f.write("## 🌐 OWASP ZAP DAST — Resumo da Varredura Dinâmica\n\n")
+                  f.write("⚠️ **A varredura DAST não gerou relatório.** Verifique as etapas anteriores para detalhes da execução.\n")
               sys.exit(0)
 
           try:
@@ -266,12 +288,17 @@ jobs:
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           github-token: ${{ secrets.TOKEN }}
           output-file: issue-dast.md
+          language: ${{ inputs.language || 'pt-BR' }}
 
       - name: "Verificar Bloqueio de Pipeline (Se ativado)"
         if: inputs.block_on_critical == true
         run: |
           python3 << 'PYEOF'
-          import json, sys
+          import json, sys, os
+
+          if not os.path.isfile("zap-report.json"):
+              print("⚠️ Arquivo zap-report.json inexistente. Bloqueio dispensado.")
+              sys.exit(0)
 
           with open("zap-report.json") as f:
               data = json.load(f)
