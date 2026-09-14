@@ -1,0 +1,28 @@
+./builder.py:2:1: F401 'json' imported but unused
+./builder.py:3:1: F401 'os' imported but unused
+./builder.py:4:1: F401 'sys' imported but unused
+./core/ai_reasoner.py:87:121: E501 line too long (161 > 120 characters)
+./core/ai_reasoner.py:90:121: E501 line too long (174 > 120 characters)
+./core/ai_reasoner.py:145:121: E501 line too long (159 > 120 characters)
+./core/ai_reasoner.py:147:121: E501 line too long (160 > 120 characters)
+./core/ai_reasoner.py:159:121: E501 line too long (159 > 120 characters)
+./core/k8s_client.py:2:1: F401 'typing.Optional' imported but unused
+./core/k8s_client.py:4:1: F401 'core.config.settings' imported but unused
+./core/predictor.py:54:121: E501 line too long (163 > 120 characters)
+./core/predictor.py:58:121: E501 line too long (127 > 120 characters)
+./core/predictor.py:72:13: F841 local variable 'rps' is assigned to but never used
+./core/predictor.py:118:121: E501 line too long (121 > 120 characters)
+./core/prometheus_client.py:107:121: E501 line too long (132 > 120 characters)
+./core/prometheus_client.py:108:121: E501 line too long (152 > 120 characters)
+./core/prometheus_client.py:109:121: E501 line too long (152 > 120 characters)
+./core/prometheus_client.py:145:13: E741 ambiguous variable name 'l'
+./core/prometheus_client.py:154:13: E741 ambiguous variable name 'l'
+./core/remediator.py:40:29: F541 f-string is missing placeholders
+./core/remediator.py:109:121: E501 line too long (143 > 120 characters)
+./main.py:7:1: F401 'typing.Any' imported but unused
+./main.py:7:1: F401 'typing.Dict' imported but unused
+./main.py:7:1: F401 'typing.List' imported but unused
+./main.py:7:1: F401 'typing.Optional' imported but unused
+./main.py:53:5: F824 `global state` is unused: name is never assigned in scope
+./main.py:119:121: E501 line too long (126 > 120 characters)
+./main.py:169:5: F821 undefined name 'time'
