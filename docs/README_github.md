@@ -1,6 +1,6 @@
 # 🤖 CI/CD, DevSecOps & Automações com GitHub Actions e IA
 
-Esta documentação detalha a arquitetura completa dos fluxos de trabalho (**Workflows**) do GitHub Actions do projeto **SolidaryTech**. A esteira implementa governança de qualidade de código, segurança contínua (**DevSecOps**), compilação de imagens OCI, sincronização **GitOps** com Argo CD, replicação para **Disaster Recovery (DR)** e um inovador **Motor de Triagem e Remediação de Segurança com Google AI Studio (Gemini)**.
+Esta documentação detalha a arquitetura completa dos fluxos de trabalho (**Workflows**) do GitHub Actions do projeto **SolidaryTech**. A esteira implementa governança de qualidade de código, segurança contínua (**DevSecOps**), testes dinâmicos de vulnerabilidades (**DAST**), compilação de imagens OCI, sincronização **GitOps** com Argo CD, replicação para **Disaster Recovery (DR)** e um inovador **Motor de Triagem e Remediação de Segurança com Google AI Studio (Gemini)**.
 
 ---
 
@@ -24,7 +24,7 @@ Esta documentação detalha a arquitetura completa dos fluxos de trabalho (**Wor
 │                                                 │                                                        │
 │                                                 ▼                                                        │
 │  ┌────────────────────────────────────────────────────────────────────────────────────────────────────┐  │
-│  │ 2. DEVSECOPS MULTI-CAMADA (SAST, SCA, SECRETS & CONTAINER)                                         │  │
+│  │ 2. DEVSECOPS MULTI-CAMADA (SAST, SCA, SECRETS, CONTAINER & DAST)                                   │  │
 │  │    ├── reusable-sast.yaml                                                                          │  │
 │  │    │   ├── Go: Gosec (Análise estática de vulnerabilidades Go)                                     │  │
 │  │    │   ├── Python: Bandit (Análise estática de vulnerabilidades Python)                            │  │
@@ -32,9 +32,13 @@ Esta documentação detalha a arquitetura completa dos fluxos de trabalho (**Wor
 │  │    ├── reusable-sca.yaml                                                                           │  │
 │  │    │   ├── Trivy FS: Varredura de CVEs em dependências (go.mod, requirements.txt)                  │  │
 │  │    │   └── OWASP Dependency-Check: Validação cruzada com base NVD (CVSS >= 9)                     │  │
-│  │    └── reusable-container-scan.yaml                                                                │  │
-│  │        ├── Dockerfile: Trivy Config (Detecção de misconfigurations e conformidade CIS)            │  │
-│  │        └── Imagem OCI: Trivy Image (Vulnerabilidades em pacotes e camadas da imagem)               │  │
+│  │    ├── reusable-container-scan.yaml                                                                │  │
+│  │    │   ├── Dockerfile: Trivy Config (Detecção de misconfigurations e conformidade CIS)            │  │
+│  │    │   └── Imagem OCI: Trivy Image (Vulnerabilidades em pacotes e camadas da imagem)               │  │
+│  │    └── reusable-dast.yaml                                                                          │  │
+│  │        ├── OWASP ZAP API Scan (Fuzzing dinâmico via OpenAPI 3.0 / /openapi.json)                  │  │
+│  │        ├── OWASP ZAP Baseline Scan (Headers de segurança, CORS, cookies, runtime errors)           │  │
+│  │        └── Infra Efêmera no Runner (PostgreSQL 16 Service + Seed init.sql + Healthcheck)           │  │
 │  └──────────────────────────────────────────────┬─────────────────────────────────────────────────────┘  │
 │                                                 │                                                        │
 │                                                 ▼                                                        │
@@ -43,7 +47,7 @@ Esta documentação detalha a arquitetura completa dos fluxos de trabalho (**Wor
 │  │    ├── Pré-filtro Heurístico (Custo Zero de API): Se 0 achados ➔ nenhuma issue aberta             │  │
 │  │    ├── Auto-Close: Se o commit corrigiu a falha anterior ➔ fecha a issue aberta via gh CLI        │  │
 │  │    ├── Análise GenAI: Google AI Studio (Gemini 3.6 Flash Lite com Structured JSON Output)         │  │
-│  │    └── Geração de Issue: Resumo executivo em PT-BR + Tabela de CVEs + Comandos exatos de correção  │  │
+│  │    └── Geração de Issue: Resumo executivo em PT-BR + Tabela de CVEs/Alertas + Comandos exatos      │  │
 │  └──────────────────────────────────────────────┬─────────────────────────────────────────────────────┘  │
 │                                                 │                                                        │
 │                                                 ▼                                                        │
@@ -64,7 +68,7 @@ Para solucionar problemas comuns de governança em pipelines DevSecOps — como 
 
 📁 **Caminho:** [`.github/actions/ai-issue-analyzer`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer)
 - [`action.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer/action.yaml): Declaração de inputs, saídas e orquestração.
-- [`analyze.py`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer/analyze.py): Script de alta performance em Python nativo (`urllib.request`), sem necessidade de `pip install` e com execução instantânea (0s overhead).
+- [`analyze.py`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer/analyze.py): Script de alta performance em Python nativo (`urllib.request`), sem necessidade de `pip install` e com execução instantânea (0s overhead). Suporta `lint`, `sca`, `sast`, `container` e `dast` (OWASP ZAP).
 
 ### ⚙️ Características Arquiteturais
 
@@ -91,7 +95,7 @@ flowchart TD
 
 1. **Heurística de Custo Zero (Zero-Cost Pre-Filter):**
    - Antes de efetuar qualquer chamada de API externa, o script inspeciona localmente o JSON de resultados ou log de erros.
-   - Se o relatório indicar **zero vulnerabilidades**, **zero misconfigurations** ou **zero erros residuais de lint**, o step encerra imediatamente com `create_issue=false`.
+   - Se o relatório indicar **zero vulnerabilidades**, **zero misconfigurations** ou **zero alertas DAST**, o step encerra imediatamente com `create_issue=false`.
    - **Economia de Recursos:** Garante zero consumo de tokens/cota na API do Google AI Studio em compilações limpas.
 
 2. **Resolução e Fechamento Automático (Auto-Close):**
@@ -103,7 +107,7 @@ flowchart TD
    - **Modo Contingência Local:** Se a secret `GEMINI_API_KEY` não for informada ou houver falha total de rede, o script utiliza um gerador heurístico local para formatar a Issue, garantindo que o pipeline **nunca quebre por falha externa**.
 
 4. **Remediação Acionável:**
-   - Em vez de um dump de JSON bruto com dezenas de linhas, a IA sintetiza o impacto real e gera **comandos exatos de correção prontos para copiar e colar** (ex: `go get pacote@versao`, `pip install pacote>=versao`, alterações em diretivas do Dockerfile ou refatorações de código).
+   - Em vez de um dump de JSON bruto com dezenas de linhas, a IA sintetiza o impacto real e gera **comandos exatos de correção prontos para copiar e colar** (ex: `go get pacote@versao`, `pip install pacote>=versao`, alterações em cabeçalhos HTTP ou diretivas do Dockerfile).
 
 ---
 
@@ -115,10 +119,11 @@ flowchart TD
 | **SCA Reutilizável** | [`reusable-sca.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/reusable-sca.yaml) | `workflow_call` | Varre dependências de terceiros com **Trivy FS** e **OWASP Dependency-Check**. Vulnerabilidades encontradas são triadas pela IA para gerar plano de atualização. |
 | **SAST Reutilizável** | [`reusable-sast.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/reusable-sast.yaml) | `workflow_call` | Análise estática profunda de segurança. Em Go: **Gosec**. Em Python: **Bandit**. Varredura de credenciais expostas: **Trivy Secrets**. Triagem completa via IA. |
 | **Container Scan** | [`reusable-container-scan.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/reusable-container-scan.yaml) | `workflow_call` | Compilação multi-stage em runner local e varredura com **Trivy**: misconfigurations no Dockerfile e CVEs na imagem OCI. Triagem completa via IA. |
-| **Deploy donation-service** | [`deploy-donation-service.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-donation-service.yaml) | `push` / `PR` (`apps/donation-service/**`) | Orquestra Lint, SCA, SAST e Container Scan para o serviço de doações (Go 1.26), propagando `GEMINI_API_KEY`. |
-| **Deploy ngo-service** | [`deploy-ngo-service.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-ngo-service.yaml) | `push` / `PR` (`apps/ngo-service/**`) | Orquestra Lint, SCA, SAST e Container Scan para o serviço de ONGs (Python 3.12), propagando `GEMINI_API_KEY`. |
-| **Deploy volunteer-service** | [`deploy-volunteer-service.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-volunteer-service.yaml) | `push` / `PR` (`apps/volunteer-service/**`) | Orquestra Lint, SCA, SAST e Container Scan para o serviço de voluntários (Python 3.12), propagando `GEMINI_API_KEY`. |
-| **Deploy aiops-engine** | [`deploy-aiops.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-aiops.yaml) | `push` / `PR` (`apps/aiops-engine/**`) | Orquestra Lint, SCA, SAST e Container Scan para o motor preditivo AIOps (Python 3.12), propagando `GEMINI_API_KEY`. |
+| **DAST Reutilizável** | [`reusable-dast.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/reusable-dast.yaml) | `workflow_call` | Teste dinâmico de segurança em tempo de execução com **OWASP ZAP**. Sobe container efêmero no runner, roda PostgreSQL de teste com `init.sql`, aguarda healthcheck e executa varredura baseada em OpenAPI 3.0 ou Baseline HTTP. Triagem via IA. |
+| **Deploy donation-service** | [`deploy-donation-service.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-donation-service.yaml) | `push` / `PR` (`apps/donation-service/**`) | Orquestra Lint, SCA, SAST, Container Scan e DAST (OWASP ZAP) para o serviço de doações (Go 1.26), propagando `GEMINI_API_KEY`. |
+| **Deploy ngo-service** | [`deploy-ngo-service.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-ngo-service.yaml) | `push` / `PR` (`apps/ngo-service/**`) | Orquestra Lint, SCA, SAST, Container Scan e DAST (OWASP ZAP) para o serviço de ONGs (Python 3.12), propagando `GEMINI_API_KEY`. |
+| **Deploy volunteer-service** | [`deploy-volunteer-service.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-volunteer-service.yaml) | `push` / `PR` (`apps/volunteer-service/**`) | Orquestra Lint, SCA, SAST, Container Scan e DAST (OWASP ZAP) para o serviço de voluntários (Python 3.12), propagando `GEMINI_API_KEY`. |
+| **Deploy aiops-engine** | [`deploy-aiops.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/deploy-aiops.yaml) | `push` / `PR` (`apps/aiops-engine/**`) | Orquestra Lint, SCA, SAST, Container Scan e DAST (OWASP ZAP) para o motor preditivo AIOps (Python 3.12), propagando `GEMINI_API_KEY`. |
 | **Build & GitOps Release** | [`build-push-gitops.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/build-push-gitops.yaml) | `push` em `main` | Compilação em lote, envio para Google Artifact Registry (`southamerica-east1`) e atualização declarativa dos manifests K8s para deploy GitOps com Argo CD. |
 | **Linting de Terraform** | [`tf-lint.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/workflows/tf-lint.yaml) | `push` / `PR` (`iac/terraform/**`) | Formatação (`terraform fmt -check`), validação sintática (`terraform validate`) e regras de boas práticas com `tflint`. |
 
@@ -150,6 +155,22 @@ flowchart TD
 - Executa **Trivy Config Scan** no `Dockerfile` para identificar configurações inseguras (ex: ausência de usuário não-root, portas privilegiadas, pacotes desnecessários).
 - Executa **Trivy Image Scan** inspecionando todas as camadas da imagem compilada em busca de CVEs no SO ou em binários compilados.
 - A IA analisa os achados e gera recomendações pontuais de imagem base (ex: migração para imagens distroless/minimalistas) e comandos de remediação.
+
+### 3.5 `reusable-dast.yaml` (Dynamic Application Security Testing)
+- **Infraestrutura Efêmera no Runner:**
+  - Inicializa um container de serviço com **PostgreSQL 16 Alpine** com healthcheck ativo.
+  - Se existir `apps/<servico>/db/init.sql`, executa o script de inicialização automaticamente via `docker exec`.
+  - Inicia o container do microsserviço em background com `--network host` e aguarda a prontidão da API em loop de retry no `/health`.
+- **Varredura com OWASP ZAP:**
+  - **Modo API (`scan_mode: api`):** Utiliza `zap-api-scan.py` consumindo as especificações OpenAPI 3.0 dos serviços (`apps/donation-service/openapi.yaml`, `apps/ngo-service/openapi.yaml`, `apps/volunteer-service/openapi.yaml`) ou a rota nativa do FastAPI (`http://127.0.0.1:8000/openapi.json` no `aiops-engine`).
+  - **Modo Baseline (`scan_mode: baseline`):** Utiliza `zap-baseline.py` para inspecionar cabeçalhos de segurança (HSTS, CSP, X-Frame-Options, CORS) e runtime errors.
+  - Gera relatórios completos em `zap-report.json` e `zap-report.html`, persistidos como artefatos da Action com retenção de 14 dias.
+- **Relatório no Step Summary:**
+  - Gera tabela executiva detalhada com contagem de achados por severidade (High, Medium, Low, Informational) diretamente na página da execução no GitHub.
+- **Triagem Automatizada com Gemini AI:**
+  - O `ai-issue-analyzer` analisa o relatório JSON do ZAP com o modelo Gemini, filtra falsos-positivos e abre issues com plano de ação quando necessário (ou auto-fecha issues anteriores quando corrigidas).
+- **Modo Consultivo (Advisory):**
+  - Configurado inicialmente com `block_on_critical: false` para permitir a inspeção de alertas e melhorias contínuas de headers antes de bloqueios restritivos.
 
 ---
 

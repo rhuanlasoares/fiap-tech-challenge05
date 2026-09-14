@@ -1,0 +1,124 @@
+openapi: 3.0.3
+info:
+  title: Donation Service API
+  description: Microsserviço de gestão e processamento de doações do SolidaryTech
+  version: 1.0.0
+servers:
+  - url: http://localhost:8082
+    description: Local / CI Runner
+paths:
+  /health:
+    get:
+      summary: Health check probe
+      operationId: getHealth
+      responses:
+        "200":
+          description: Serviço operacional
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /donation-service/health:
+    get:
+      summary: Health check probe prefixado
+      operationId: getServiceHealth
+      responses:
+        "200":
+          description: Serviço operacional
+  /donations:
+    get:
+      summary: Listar todas as doações registradas
+      operationId: listDonations
+      responses:
+        "200":
+          description: Lista de doações retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Donation"
+    post:
+      summary: Registrar nova doação
+      operationId: createDonation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DonationInput"
+      responses:
+        "200":
+          description: Doação registrada e aprovada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Donation"
+        "202":
+          description: Doação em fila de alta disponibilidade
+        "400":
+          description: Payload inválido
+  /donation-service/donations:
+    get:
+      summary: Listar todas as doações prefixado
+      operationId: listDonationsPrefixed
+      responses:
+        "200":
+          description: Lista retornada
+    post:
+      summary: Registrar nova doação prefixado
+      operationId: createDonationPrefixed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DonationInput"
+      responses:
+        "200":
+          description: Doação registrada
+components:
+  schemas:
+    DonationInput:
+      type: object
+      required:
+        - ngo_id
+        - amount
+        - donor_name
+      properties:
+        ngo_id:
+          type: integer
+          example: 1
+        amount:
+          type: number
+          format: float
+          example: 150.00
+        donor_name:
+          type: string
+          example: Maria da Silva
+    Donation:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        ngo_id:
+          type: integer
+          example: 1
+        amount:
+          type: number
+          format: float
+          example: 150.00
+        donor_name:
+          type: string
+          example: Maria da Silva
+        status:
+          type: string
+          example: APPROVED
+        created_at:
+          type: string
+          format: date-time

@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: NGO Service API
+  description: Microsserviço de gestão de ONGs parceiras do SolidaryTech
+  version: 1.0.0
+servers:
+  - url: http://localhost:8081
+    description: Local / CI Runner
+paths:
+  /health:
+    get:
+      summary: Health check probe
+      operationId: getHealth
+      responses:
+        "200":
+          description: Serviço operacional
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /ngo-service/health:
+    get:
+      summary: Health check probe prefixado
+      operationId: getServiceHealth
+      responses:
+        "200":
+          description: Serviço operacional
+  /pre-stop:
+    get:
+      summary: Lifecycle pre-stop hook
+      operationId: preStop
+      responses:
+        "200":
+          description: Graceful shutdown aceito
+  /ngo-service/pre-stop:
+    get:
+      summary: Lifecycle pre-stop hook prefixado
+      operationId: preStopPrefixed
+      responses:
+        "200":
+          description: Graceful shutdown aceito
+  /ngos:
+    get:
+      summary: Listar todas as ONGs cadastradas
+      operationId: listNGOs
+      responses:
+        "200":
+          description: Lista de ONGs retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NGO"
+    post:
+      summary: Cadastrar nova ONG parceira
+      operationId: createNGO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NGOInput"
+      responses:
+        "201":
+          description: ONG cadastrada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NGO"
+        "400":
+          description: Campos obrigatórios ausentes
+  /ngo-service/ngos:
+    get:
+      summary: Listar todas as ONGs prefixado
+      operationId: listNGOsPrefixed
+      responses:
+        "200":
+          description: Lista de ONGs retornada
+    post:
+      summary: Cadastrar nova ONG prefixado
+      operationId: createNGOPrefixed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NGOInput"
+      responses:
+        "201":
+          description: ONG cadastrada
+components:
+  schemas:
+    NGOInput:
+      type: object
+      required:
+        - name
+        - email
+        - cause
+        - city
+      properties:
+        name:
+          type: string
+          example: Anjos de Patas
+        email:
+          type: string
+          format: email
+          example: contato@anjosdepatas.org
+        cause:
+          type: string
+          example: Proteção Animal
+        city:
+          type: string
+          example: Osasco
+    NGO:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Anjos de Patas
+        email:
+          type: string
+          example: contato@anjosdepatas.org
+        cause:
+          type: string
+          example: Proteção Animal
+        city:
+          type: string
+          example: Osasco
+        created_at:
+          type: string
+          format: date-time

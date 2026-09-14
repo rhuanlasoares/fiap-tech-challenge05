@@ -1,0 +1,167 @@
+openapi: 3.0.3
+info:
+  title: Volunteer Service API
+  description: Microsserviço de gestão de voluntários do SolidaryTech
+  version: 1.0.0
+servers:
+  - url: http://localhost:8081
+    description: Local / CI Runner
+paths:
+  /health:
+    get:
+      summary: Health check probe
+      operationId: getHealth
+      responses:
+        "200":
+          description: Serviço operacional
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /volunteer-service/health:
+    get:
+      summary: Health check probe prefixado
+      operationId: getServiceHealth
+      responses:
+        "200":
+          description: Serviço operacional
+  /pre-stop:
+    get:
+      summary: Lifecycle pre-stop hook
+      operationId: preStop
+      responses:
+        "200":
+          description: Graceful shutdown aceito
+  /volunteer-service/pre-stop:
+    get:
+      summary: Lifecycle pre-stop hook prefixado
+      operationId: preStopPrefixed
+      responses:
+        "200":
+          description: Graceful shutdown aceito
+  /volunteers:
+    post:
+      summary: Cadastrar novo voluntário
+      operationId: createVolunteer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VolunteerInput"
+      responses:
+        "201":
+          description: Voluntário cadastrado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Volunteer"
+        "400":
+          description: Campos obrigatórios ausentes
+  /volunteer-service/volunteers:
+    post:
+      summary: Cadastrar novo voluntário prefixado
+      operationId: createVolunteerPrefixed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VolunteerInput"
+      responses:
+        "201":
+          description: Voluntário cadastrado
+  /volunteers/{ngo_id}:
+    get:
+      summary: Listar voluntários por ONG
+      operationId: listVolunteersByNGO
+      parameters:
+        - name: ngo_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lista de voluntários retornada
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Volunteer"
+  /volunteer-service/volunteers/{ngo_id}:
+    get:
+      summary: Listar voluntários por ONG prefixado
+      operationId: listVolunteersByNGOPrefixed
+      parameters:
+        - name: ngo_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lista retornada
+  /error:
+    get:
+      summary: Endpoint de teste de erro para telemetria
+      operationId: triggerError
+      responses:
+        "500":
+          description: Erro simulado para observabilidade
+  /volunteer-service/error:
+    get:
+      summary: Endpoint de teste de erro prefixado
+      operationId: triggerErrorPrefixed
+      responses:
+        "500":
+          description: Erro simulado
+components:
+  schemas:
+    VolunteerInput:
+      type: object
+      required:
+        - name
+        - email
+        - skills
+        - ngo_id
+      properties:
+        name:
+          type: string
+          example: Carlos Silva
+        email:
+          type: string
+          format: email
+          example: carlos.silva@email.com
+        skills:
+          type: string
+          example: Logística, Distribuição de Alimentos
+        ngo_id:
+          type: integer
+          example: 1
+    Volunteer:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Carlos Silva
+        email:
+          type: string
+          example: carlos.silva@email.com
+        skills:
+          type: string
+          example: Logística, Distribuição de Alimentos
+        ngo_id:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time

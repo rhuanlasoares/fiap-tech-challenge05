@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
 AI Issue Analyzer for GitHub Actions
-Analisa relatórios de segurança (SCA, SAST, Container) e Lint utilizando
-Google AI Studio (Gemini) para decidir com inteligência se uma Issue é necessária,
-sintetizando CVEs e fornecendo remediação direta.
+Analisa relatórios de segurança (SCA, SAST, Container, DAST) e Lint utilizando
+Google AI Studio (Gemini) para decidir com inteligência se uma Issue é necessária.
 """
 
 import argparse
@@ -51,9 +50,9 @@ def auto_close_existing_issue(service_name: str, scan_type: str, tool_name: str,
                 commit_sha = os.getenv("GITHUB_SHA", "latest")
                 comment = (
                     f"✅ **Problema Resolvido**\n\n"
-                    f"A verificação `{tool_name}` (`{scan_type.upper()}`) para `{service_name}` "
-                    f"não encontrou nenhum achado no commit `{commit_sha}`.\n"
-                    f"Fechando issue automaticamente."
+                    f"A verificação de pipeline `{tool_name}` (`{scan_type.upper()}`) para `{service_name}` "
+                    f"não encontrou nenhuma vulnerabilidade no commit `{commit_sha}`.\n"
+                    f"Fechando issue automaticamente via integração contínua."
                 )
                 print(f"[ai-issue-analyzer] Fechando issue resolvida #{num} ('{title}')")
                 subprocess.run(
@@ -67,15 +66,12 @@ def auto_close_existing_issue(service_name: str, scan_type: str, tool_name: str,
 
 
 def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: str = None) -> list:
-    """
-    Faz o parse do arquivo de scan e retorna uma lista padronizada de achados.
-    """
+    """Faz o parse do arquivo de scan e retorna uma lista padronizada de achados."""
     findings = []
-
+    
     # 1. Lint
     if scan_type.lower() == "lint":
-        error_content = ""
-        diff_content = ""
+        error_content, diff_content = "", ""
         if report_file and os.path.isfile(report_file):
             with open(report_file, "r", encoding="utf-8", errors="ignore") as f:
                 error_content = f.read().strip()
@@ -86,10 +82,8 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
         if not error_content and not diff_content:
             return []
 
-        # Se existirem erros residuais no linter, registramos
         if error_content:
-            lines = [l.strip() for l in error_content.splitlines() if l.strip()]
-            for line in lines[:25]:
+            for line in [l.strip() for l in error_content.splitlines() if l.strip()][:25]:
                 findings.append({
                     "id": "LINT-ERROR",
                     "component": line.split(":")[0] if ":" in line else "código",
@@ -101,7 +95,6 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
         return findings
 
     if not report_file or not os.path.isfile(report_file):
-        print(f"[ai-issue-analyzer] Aviso: Arquivo de relatório '{report_file}' não encontrado.")
         return []
 
     try:
@@ -110,11 +103,9 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
         if not raw_text:
             return []
         data = json.loads(raw_text)
-    except Exception as e:
-        # Se for texto puro (ex: log de saída de linter ou diff)
+    except Exception:
         if raw_text:
-            lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
-            for line in lines[:25]:
+            for line in [l.strip() for l in raw_text.splitlines() if l.strip()][:25]:
                 findings.append({
                     "id": f"{tool_name.upper()}-ITEM",
                     "component": line.split(":")[0] if ":" in line else "arquivo",
@@ -125,22 +116,20 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
                 })
         return findings
 
-    # Lista direta de itens (ex: Hadolint JSON)
-    if isinstance(data, list):
+    if isinstance(data, list) and scan_type.lower() != "dast":
         for item in data:
             findings.append({
                 "id": item.get("code", "RULE"),
                 "component": f"{item.get('file', 'Dockerfile')}:{item.get('line', '')}",
-                "severity": item.get("level", "info").upper(),
+                "severity": str(item.get("level", "info")).upper(),
                 "title": item.get("message", "Lint finding"),
                 "description": item.get("message", ""),
                 "remediation": "Ajuste a diretiva conforme recomendação da regra."
             })
         return findings
 
-    # 2. SCA (Trivy, OWASP)
+    # 2. SCA
     if scan_type.lower() == "sca":
-        # Trivy
         if "Results" in data:
             for res in data.get("Results", []):
                 target = res.get("Target", "unknown")
@@ -151,28 +140,12 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
                         "severity": vuln.get("Severity", "UNKNOWN").upper(),
                         "title": vuln.get("Title") or vuln.get("VulnerabilityID", "Vulnerabilidade"),
                         "description": vuln.get("Description", "Sem descrição."),
-                        "installed_version": vuln.get("InstalledVersion", "N/A"),
-                        "fixed_version": vuln.get("FixedVersion", "N/A"),
-                        "remediation": f"Atualizar pacote {vuln.get('PkgName')} para versão {vuln.get('FixedVersion', 'mais recente')}."
-                    })
-        # OWASP Dependency-Check
-        if "dependencies" in data:
-            for dep in data.get("dependencies", []):
-                pkg_name = dep.get("fileName", "unknown")
-                for vuln in dep.get("vulnerabilities", []) or []:
-                    findings.append({
-                        "id": vuln.get("name", "N/A"),
-                        "component": pkg_name,
-                        "severity": vuln.get("severity", "UNKNOWN").upper(),
-                        "title": vuln.get("name", "Vulnerabilidade"),
-                        "description": vuln.get("description", "Sem descrição."),
-                        "remediation": f"Atualizar dependência {pkg_name} para sanar {vuln.get('name')}."
+                        "remediation": f"Atualizar {vuln.get('PkgName')} para a versão {vuln.get('FixedVersion', 'mais recente')}."
                     })
 
-    # 3. SAST (Gosec, Bandit, Semgrep, Trivy Secrets)
+    # 3. SAST
     elif scan_type.lower() == "sast":
-        # Gosec
-        if "Issues" in data:
+        if "Issues" in data: # Gosec
             for issue in data.get("Issues", []):
                 findings.append({
                     "id": issue.get("rule_id", "GOSEC"),
@@ -182,32 +155,20 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
                     "description": f"{issue.get('details', '')} (Trecho: {issue.get('code', '').strip()})",
                     "remediation": "Refatorar código para eliminar a vulnerabilidade identificada."
                 })
-        # Bandit
-        if "results" in data:
-            for res in data.get("results", []):
-                findings.append({
-                    "id": res.get("test_id", "BANDIT"),
-                    "component": f"{res.get('filename', '')}:{res.get('line_number', '')}",
-                    "severity": res.get("issue_severity", "LOW").upper(),
-                    "title": res.get("issue_text", "Problema de Segurança"),
-                    "description": f"{res.get('issue_text', '')} (Trecho: {res.get('code', '').strip()})",
-                    "remediation": res.get("more_info", "Revisar trecho de código apontado pelo Bandit.")
-                })
-        # Trivy Secrets
-        if "Results" in data:
+        if "Results" in data: # Trivy Secrets
             for res in data.get("Results", []):
                 target = res.get("Target", "código")
                 for sec in res.get("Secrets", []) or []:
                     findings.append({
                         "id": sec.get("RuleID", "SECRET-EXPOSED"),
                         "component": f"{target}:{sec.get('StartLine', '')}",
-                        "severity": sec.get("Severity", "HIGH").upper(),
+                        "severity": sec.get("Severity", "CRITICAL").upper(),
                         "title": sec.get("Title", "Credencial Exposta"),
-                        "description": f"Credencial ou token detectado no código: {sec.get('Category', '')} - {sec.get('Title', '')}",
-                        "remediation": "Remover imediatamente o secret do histórico git, rotacionar a chave e injetar via Secret Manager."
+                        "description": f"Token detectado: {sec.get('Category', '')} - {sec.get('Title', '')}",
+                        "remediation": "Remover do histórico git, rotacionar a chave e injetar via gerenciador de secrets."
                     })
 
-    # 4. Container (Trivy Dockerfile Misconfig, Trivy Image Vulns)
+    # 4. Container
     elif scan_type.lower() == "container":
         if "Results" in data:
             for res in data.get("Results", []):
@@ -219,7 +180,7 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
                         "severity": conf.get("Severity", "LOW").upper(),
                         "title": conf.get("Title", "Configuração Insegura"),
                         "description": conf.get("Description", "Sem descrição."),
-                        "remediation": conf.get("Resolution", "Ajustar diretiva do Dockerfile conforme boas práticas.")
+                        "remediation": conf.get("Resolution", "Ajustar diretiva do Dockerfile.")
                     })
                 for vuln in res.get("Vulnerabilities", []) or []:
                     findings.append({
@@ -228,236 +189,218 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
                         "severity": vuln.get("Severity", "UNKNOWN").upper(),
                         "title": vuln.get("Title") or vuln.get("VulnerabilityID", "Vulnerabilidade"),
                         "description": vuln.get("Description", "Sem descrição."),
-                        "installed_version": vuln.get("InstalledVersion", "N/A"),
-                        "fixed_version": vuln.get("FixedVersion", "N/A"),
                         "remediation": f"Atualizar imagem base ou pacote {vuln.get('PkgName')}."
                     })
+
+    # 5. DAST (Ex: OWASP ZAP)
+    elif scan_type.lower() == "dast":
+        site_raw = data.get("site", []) if isinstance(data, dict) else []
+        site_list = [site_raw] if isinstance(site_raw, dict) else (site_raw or [])
+        for site in site_list:
+            if not isinstance(site, dict):
+                continue
+            alerts_raw = site.get("alerts", [])
+            alerts_list = [alerts_raw] if isinstance(alerts_raw, dict) else (alerts_raw or [])
+            for alert in alerts_list:
+                if not isinstance(alert, dict):
+                    continue
+                instances = alert.get("instances", [])
+                first_uri = instances[0].get("uri") if instances and isinstance(instances[0], dict) else None
+                endpoint = alert.get("url") or first_uri or site.get("@name", "Endpoint Desconhecido")
+                
+                # ZAP severities: High, Medium, Low, Informational
+                raw_sev = alert.get("riskdesc", "LOW").split(" ")[0].upper()
+                sev = "INFO" if raw_sev in ["INFORMATIONAL", "INFO"] else raw_sev
+
+                findings.append({
+                    "id": str(alert.get("pluginid", "DAST-ALERT")),
+                    "component": endpoint,
+                    "severity": sev,
+                    "title": alert.get("name") or alert.get("alert", "Vulnerabilidade DAST"),
+                    "description": alert.get("desc", "Sem descrição.").replace("<p>", "").replace("</p>", ""),
+                    "remediation": alert.get("solution", "Verificar documentação de segurança para o endpoint.")
+                })
 
     return findings
 
 
-def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-3.6-flash-lite") -> dict:
-    """Chama a API do Google AI Studio com Structured JSON Output e fallback automático."""
-    models_to_try = [model, "gemini-3.6-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-1.5-flash") -> dict:
+    """Chama a API do Google AI Studio com Structured JSON Output."""
+    models_to_try = [model, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
     seen = set()
     models = [m for m in models_to_try if not (m in seen or seen.add(m))]
 
-    last_error = None
     for m in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
         payload = {
-            "contents": [
-                {
-                    "parts": [{"text": prompt}]
-                }
-            ],
+            "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 0.2,
+                "temperature": 0.1,
                 "responseMimeType": "application/json"
             }
         }
-        data_bytes = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data_bytes,
-            headers={"Content-Type": "application/json"}
-        )
         try:
-            print(f"[ai-issue-analyzer] Chamando Gemini API (modelo: {m})...")
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=45) as resp:
                 result_json = json.loads(resp.read().decode("utf-8"))
-                candidates = result_json.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        text_response = parts[0].get("text", "")
-                        return json.loads(text_response)
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="ignore")
-            print(f"[ai-issue-analyzer] HTTPError com modelo {m} ({e.code}): {err_body}")
-            last_error = e
+                text_response = result_json.get("candidates", [])[0].get("content", {}).get("parts", [])[0].get("text", "")
+                return json.loads(text_response)
         except Exception as e:
-            print(f"[ai-issue-analyzer] Erro com modelo {m}: {e}")
-            last_error = e
-
-    print(f"[ai-issue-analyzer] Falha ao comunicar com a Gemini API: {last_error}")
+            print(f"[ai-issue-analyzer] Falha com modelo {m}: {e}")
     return None
 
 
 def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, findings: list) -> dict:
-    """Gera uma estrutura padronizada caso a API do Gemini não esteja disponível."""
-    sev_counts = {}
-    for f in findings:
-        sev = f.get("severity", "LOW")
-        sev_counts[sev] = sev_counts.get(sev, 0) + 1
-
-    max_sev = "LOW"
-    for s in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
-        if sev_counts.get(s, 0) > 0:
-            max_sev = s
-            break
-
-    summary = f"Foram identificados {len(findings)} achados na verificação {tool_name} para o serviço {service_name}."
-    action_plan = "Revise as dependências e o código listados abaixo para aplicar as correções recomendadas."
+    """Gera estrutura padrão caso a API do Gemini falhe."""
+    sev_counts = {f.get("severity", "LOW"): True for f in findings}
+    max_sev = "CRITICAL" if "CRITICAL" in sev_counts else "HIGH" if "HIGH" in sev_counts else "MEDIUM" if "MEDIUM" in sev_counts else "LOW"
 
     return {
         "should_create_issue": True,
         "max_severity": max_sev,
         "title_summary": f"{len(findings)} achados detectados ({max_sev})",
-        "executive_summary": summary,
+        "executive_summary": f"Identificados {len(findings)} achados na ferramenta {tool_name}.",
         "findings": findings[:20],
-        "action_plan": action_plan
+        "action_checklist": ["Revisar vulnerabilidades e cabeçalhos de segurança apontados", "Aplicar correções recomendadas no serviço"]
     }
 
 
 def main():
     parser = argparse.ArgumentParser(description="AI Issue Analyzer with Gemini")
-    parser.add_argument("--scan-type", required=True, choices=["lint", "sca", "sast", "container"], help="Tipo de scan")
-    parser.add_argument("--tool-name", required=True, help="Nome da ferramenta (ex: Trivy, Gosec, Lint Go)")
-    parser.add_argument("--report-file", required=False, default="", help="Arquivo de resultado do scan")
-    parser.add_argument("--diff-file", required=False, default="", help="Arquivo diff (para Lint)")
-    parser.add_argument("--service-name", required=True, help="Nome do serviço (ex: donation-service)")
-    parser.add_argument("--service-path", required=False, default="", help="Caminho do serviço (ex: apps/donation-service)")
-    parser.add_argument("--gemini-api-key", required=False, default="", help="API Key do Google AI Studio")
-    parser.add_argument("--github-token", required=False, default="", help="GitHub Token")
-    parser.add_argument("--output-file", required=False, default="issue-ai.md", help="Arquivo markdown gerado")
-    parser.add_argument("--model", required=False, default="gemini-3.6-flash-lite", help="Modelo Gemini")
+    parser.add_argument("--scan-type", required=True, choices=["lint", "sca", "sast", "container", "dast"])
+    parser.add_argument("--tool-name", required=True)
+    parser.add_argument("--report-file", default="")
+    parser.add_argument("--diff-file", default="")
+    parser.add_argument("--service-name", required=True)
+    parser.add_argument("--service-path", default="")
+    parser.add_argument("--gemini-api-key", default=os.getenv("GEMINI_API_KEY", ""))
+    parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN", os.getenv("GH_TOKEN", "")))
+    parser.add_argument("--output-file", default="issue-ai.md")
+    parser.add_argument("--model", default="gemini-1.5-flash")
 
     args = parser.parse_args()
-
-    api_key = args.gemini_api_key or os.getenv("GEMINI_API_KEY", "")
-    token = args.github_token or os.getenv("GITHUB_TOKEN", "") or os.getenv("GH_TOKEN", "")
     service_path = args.service_path or args.service_name
+    token = args.github_token
 
-    print(f"[ai-issue-analyzer] Iniciando análise: scan_type={args.scan_type}, tool={args.tool_name}, service={args.service_name}")
-
-    # 1. Parse findings
     findings = parse_findings(args.scan_type, args.tool_name, args.report_file, args.diff_file)
-    print(f"[ai-issue-analyzer] Total de achados brutos identificados: {len(findings)}")
-
-    # 2. Heurística Pré-Filtro (Custo Zero de API)
-    if len(findings) == 0:
-        print(f"[ai-issue-analyzer] ✅ Nenhum achado relevante encontrado. Nenhuma Issue será criada.")
+    
+    if not findings:
+        print("[ai-issue-analyzer] ✅ Nenhum achado relevante. Nenhuma Issue será criada.")
         set_github_output("create_issue", "false")
         auto_close_existing_issue(args.service_name, args.scan_type, args.tool_name, token)
         sys.exit(0)
 
-    # 3. Análise Inteligente com Gemini API
     ai_result = None
-    if api_key:
+    if args.gemini_api_key:
         prompt = f"""
-Você é um especialista sênior em DevSecOps e Segurança de Aplicações.
-Analise os seguintes achados gerados pela ferramenta '{args.tool_name}' ({args.scan_type.upper()}) para o microserviço '{args.service_name}' (caminho: '{service_path}').
-
-Achados ({len(findings)} itens brutos):
-{json.dumps(findings[:25], indent=2, ensure_ascii=False)}
+Você é um especialista em DevSecOps. Analise os achados da ferramenta '{args.tool_name}' ({args.scan_type.upper()}) para o microserviço '{args.service_name}'.
+Achados brutos ({len(findings)} itens): {json.dumps(findings[:25], ensure_ascii=False)}
 
 Objetivos:
-1. Avalie se esses achados justificam a abertura de uma Issue no GitHub ('should_create_issue'). Ignorar apenas se forem puramente informativos ou sem risco real.
-2. Identifique a severidade máxima real ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW').
-3. Crie um resumo executivo conciso em português do Brasil, explicando em 1 ou 2 parágrafos o risco desses achados para o serviço.
-4. Para cada achado principal (máximo 15 principais), descreva o impacto de forma clara e a remediação exata (ex: comando `go get package@version`, comando `pip install`, diretiva no Dockerfile ou alteração no código).
-5. Forneça um plano de ação ('action_plan') objetivo em Markdown com o passo a passo que o desenvolvedor deve executar para corrigir o problema.
+1. Avalie se os achados justificam uma Issue de engenharia ('should_create_issue').
+2. Defina a severidade máxima ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO').
+3. Crie um resumo executivo direto e técnico em português (1 parágrafo).
+4. Elabore um 'action_checklist': um array de strings com ações diretas (ex: "Configurar cabeçalho X-Content-Type-Options: nosniff", "Adicionar Content-Security-Policy", "Sanitizar entrada no endpoint /donations").
 
-Responda ESTRITAMENTE em formato JSON com o seguinte schema:
+Responda ESTRITAMENTE neste JSON schema:
 {{
   "should_create_issue": true,
-  "max_severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-  "title_summary": "resumo curto em português para o título (ex: 3 CVEs em dependências Go)",
-  "executive_summary": "parágrafo explicativo em português",
+  "max_severity": "CRITICAL",
+  "title_summary": "resumo para o título",
+  "executive_summary": "parágrafo explicativo",
   "findings": [
-    {{
-      "id": "CVE-XXXX ou ID",
-      "component": "pacote ou arquivo",
-      "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-      "description": "breve explicação do problema",
-      "remediation": "como solucionar exatamente"
-    }}
+    {{ "id": "RULE-ID", "component": "endpoint/arquivo", "severity": "HIGH", "description": "problema", "remediation": "solução" }}
   ],
-  "action_plan": "passo a passo com comandos de remediação em markdown"
+  "action_checklist": ["Passo 1", "Passo 2"]
 }}
 """
-        ai_result = call_gemini_api(api_key, prompt, args.model)
+        ai_result = call_gemini_api(args.gemini_api_key, prompt, args.model)
 
     if not ai_result:
-        print("[ai-issue-analyzer] Utilizando gerador de contingência (fallback local)...")
         ai_result = generate_fallback_issue(args.scan_type, args.tool_name, args.service_name, findings)
 
-    should_create = ai_result.get("should_create_issue", True)
-    if not should_create:
-        print("[ai-issue-analyzer] ℹ️ A IA avaliou que os achados não justificam a abertura de Issue. Nenhuma issue será criada.")
+    if not ai_result.get("should_create_issue", True):
+        print("[ai-issue-analyzer] ℹ️ Achados ignorados pela IA. Nenhuma issue será criada.")
         set_github_output("create_issue", "false")
         sys.exit(0)
 
-    # 4. Geração do Markdown com frontmatter para JasonEtco/create-an-issue
+    # Definição de Cores/Alertas baseada na Severidade
     max_sev = ai_result.get("max_severity", "HIGH").upper()
-    title_summary = ai_result.get("title_summary", f"Achados em {args.service_name}")
+    alert_type = "[!CAUTION]" if max_sev == "CRITICAL" else "[!IMPORTANT]" if max_sev == "HIGH" else "[!WARNING]"
+    
+    title_summary = ai_result.get("title_summary", f"Vulnerabilidades Identificadas")
     labels = ["security", args.scan_type.lower(), args.tool_name.lower().replace(" ", "-"), max_sev.lower()]
-    labels_str = ", ".join([f'"{l}"' for l in labels])
-
-    run_number = os.getenv("GITHUB_RUN_NUMBER", "local")
-    run_id = os.getenv("GITHUB_RUN_ID", "local")
-    server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com")
-    repository = os.getenv("GITHUB_REPOSITORY", "repo")
+    
+    # Metadata do GitHub
+    run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY', 'repo')}/actions/runs/{os.getenv('GITHUB_RUN_ID', 'local')}"
     commit_sha = os.getenv("GITHUB_SHA", "main")
-    branch = os.getenv("GITHUB_REF_NAME", "main")
-    run_url = f"{server_url}/{repository}/actions/runs/{run_id}"
-    now_utc = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    # Geração do Markdown (Otimizado para GitHub Flavored Markdown)
+    md = [
+        "---",
+        f"title: '[{args.scan_type.upper()}][{args.service_name}] {max_sev}: {title_summary}'",
+        f"labels: [{', '.join([f'\"{l}\"' for l in labels])}]",
+        "---",
+        "",
+        f"# 🛡️ Triagem de Segurança: {args.tool_name.capitalize()}",
+        "",
+        f"> {alert_type}",
+        f"> **Microserviço:** `{args.service_name}` | **Severidade Máxima:** `{max_sev}`",
+        f"> **Origem:** [Pipeline Run]({run_url}) | **Commit:** `{commit_sha[:7]}`",
+        "",
+        "## 📝 Resumo Executivo",
+        ai_result.get("executive_summary", "Problemas identificados durante o fluxo de CI/CD."),
+        "",
+        "## 🛠️ Plano de Ação (Checklist)",
+        "Marque as caixas abaixo conforme as correções forem aplicadas no código:"
+    ]
 
-    md = []
-    md.append("---")
-    md.append(f"title: '[{args.scan_type.upper()}][{args.service_name}] [{max_sev}] {args.tool_name} — {title_summary}'")
-    md.append(f"labels: [{labels_str}]")
-    md.append("---")
-    md.append("")
-    md.append(f"# 🛡️ Triagem de Segurança & Qualidade — {args.tool_name}")
-    md.append("")
-    md.append(f"> [!IMPORTANT]")
-    md.append(f"> **Serviço:** `{args.service_name}` (`{service_path}`) | **Severidade Máxima:** `{max_sev}`")
-    md.append(f"> **Workflow Run:** [#{run_number}]({run_url}) | **Branch:** `{branch}` | **Commit:** `{commit_sha[:8] if len(commit_sha)>=8 else commit_sha}`")
-    md.append(f"> **Data/Hora:** `{now_utc}`")
-    md.append("")
-    md.append("## 📋 Resumo Executivo da IA")
-    md.append(ai_result.get("executive_summary", "Problemas identificados durante o scan."))
-    md.append("")
-    md.append(f"## 🔍 Principais Problemas Identificados ({len(ai_result.get('findings', []))})")
-    md.append("")
-    md.append("| ID / CVE | Componente / Alvo | Severidade | Descrição & Impacto |")
-    md.append("|---|---|---|---|")
+    for task in ai_result.get("action_checklist", []):
+        md.append(f"- [ ] {task}")
+
+    md.extend([
+        "",
+        "## 🔍 Detalhamento das Vulnerabilidades",
+        "",
+        "| ID / Regra | Componente | Severidade | Ação Necessária |",
+        "|---|---|---|---|"
+    ])
+
     for f in ai_result.get("findings", []):
         f_id = f.get("id", "N/A")
         comp = f.get("component", "N/A")
         sev = f.get("severity", "UNKNOWN")
-        desc = f.get("description", "").replace("\n", " ").replace("|", "\\|")
-        md.append(f"| `{f_id}` | `{comp}` | **{sev}** | {desc} |")
-    md.append("")
-    md.append("## 💡 Como Solucionar (Plano de Remediação)")
-    md.append(ai_result.get("action_plan", "Siga as orientações das ferramentas para corrigir os problemas."))
-    md.append("")
-    md.append("<details>")
-    md.append("<summary>📦 Detalhes Técnicos e Remediações Individuais</summary>")
-    md.append("")
+        remed = f.get("remediation", "").replace("\n", " ")
+        md.append(f"| `{f_id}` | `{comp}` | **{sev}** | {remed} |")
+
+    md.extend([
+        "",
+        "<details>",
+        "<summary><strong>📦 Expandir Descrições Técnicas Completas</strong></summary>",
+        ""
+    ])
+
     for f in ai_result.get("findings", []):
-        md.append(f"### 🔸 {f.get('id')} — {f.get('component')}")
-        md.append(f"- **Severidade:** {f.get('severity')}")
-        md.append(f"- **Descrição:** {f.get('description')}")
-        if f.get("remediation"):
-            md.append(f"- **Remediação Sugerida:** {f.get('remediation')}")
-        md.append("")
-    md.append("</details>")
-    md.append("")
-    md.append("---")
-    md.append("_Relatório analisado e sintetizado automaticamente via Google AI Studio (Gemini)._")
+        md.extend([
+            f"### 🔸 {f.get('id')} ({f.get('severity')})",
+            f"- **Alvo:** `{f.get('component')}`",
+            f"- **Contexto Técnico:** {f.get('description')}",
+            ""
+        ])
 
-    output_content = "\n".join(md)
+    md.extend([
+        "</details>",
+        "",
+        "---",
+        "🤖 *Análise gerada via Google Gemini. Avalie o contexto antes de aplicar mudanças estruturais.*"
+    ])
+
     with open(args.output_file, "w", encoding="utf-8") as out_f:
-        out_f.write(output_content)
+        out_f.write("\n".join(md))
 
-    print(f"[ai-issue-analyzer] Arquivo de Issue gerado com sucesso: {args.output_file}")
     set_github_output("create_issue", "true")
     set_github_output("issue_file", args.output_file)
     set_github_output("max_severity", max_sev)
-
 
 if __name__ == "__main__":
     main()

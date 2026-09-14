@@ -77,10 +77,28 @@ jobs:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
+  dast:
+    name: 🌐 DAST (OWASP ZAP)
+    needs: container-scan
+    uses: ./.github/workflows/reusable-dast.yaml
+    with:
+      service_path: apps/aiops-engine
+      service_name: aiops-engine
+      image_name: aiops-engine
+      image_tag: ${{ github.sha }}
+      port: "8000"
+      health_endpoint: "/health"
+      scan_mode: "api"
+      openapi_file: "http://127.0.0.1:8000/openapi.json"
+      block_on_critical: false
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
   # build-push-gitops:
   #   name: 🚀 Build, Push and Update GitOps Manifests
   #   if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-  #   needs: container-scan
+  #   needs: [container-scan, dast]
   #   permissions:
   #     contents: write
   #     id-token: write

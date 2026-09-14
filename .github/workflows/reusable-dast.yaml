@@ -1,0 +1,302 @@
+name: ♻️ Reusable — DAST (OWASP ZAP)
+
+on:
+  workflow_call:
+    inputs:
+      service_path:
+        description: "Caminho do serviço (ex: apps/donation-service)"
+        required: true
+        type: string
+      service_name:
+        description: "Nome do serviço (ex: donation-service)"
+        required: true
+        type: string
+      image_name:
+        description: "Nome da imagem Docker"
+        required: true
+        type: string
+      image_tag:
+        description: "Tag da imagem Docker"
+        required: true
+        type: string
+      port:
+        description: "Porta em que o serviço escuta no runner"
+        required: false
+        type: string
+        default: "8080"
+      health_endpoint:
+        description: "Endpoint de verificação de prontidão (readiness)"
+        required: false
+        type: string
+        default: "/health"
+      scan_mode:
+        description: "Modo de scan: 'api' (OpenAPI via zap-api-scan.py) ou 'baseline' (zap-baseline.py)"
+        required: false
+        type: string
+        default: "api"
+      openapi_file:
+        description: "Caminho relativo do arquivo OpenAPI (ex: apps/donation-service/openapi.yaml) ou URL (ex: http://127.0.0.1:8000/openapi.json)"
+        required: false
+        type: string
+        default: ""
+      block_on_critical:
+        description: "Bloquear pipeline se vulnerabilidades HIGH/CRITICAL forem encontradas"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      TOKEN:
+        required: true
+      GEMINI_API_KEY:
+        required: false
+
+jobs:
+  dast:
+    name: DAST — ${{ inputs.service_name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      security-events: write
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: appuser
+          POSTGRES_PASSWORD: apppassword
+          POSTGRES_DB: appdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: "Build — Construir imagem Docker para teste dinâmico"
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ inputs.service_path }}
+          push: false
+          load: true
+          tags: ${{ inputs.image_name }}:${{ inputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: "Banco de Dados — Aplicar seed schema se existente"
+        run: |
+          if [ -f "${{ inputs.service_path }}/db/init.sql" ]; then
+            echo "[DAST] Inicializando tabelas de teste via init.sql..."
+            CONTAINER_ID=$(docker ps -q --filter ancestor=postgres:16-alpine | head -n 1)
+            if [ -n "$CONTAINER_ID" ]; then
+              docker exec -i "$CONTAINER_ID" psql -U appuser -d appdb < "${{ inputs.service_path }}/db/init.sql"
+              echo "✅ Banco de dados efêmero provisionado com sucesso."
+            else
+              echo "⚠️ Container PostgreSQL não encontrado para inicialização de schema."
+            fi
+          else
+            echo "[DAST] Nenhum script db/init.sql encontrado. Pulando etapa de seed."
+          fi
+
+      - name: "Executar Microsserviço em Background"
+        run: |
+          echo "[DAST] Iniciando container do microsserviço ${{ inputs.service_name }}..."
+          docker run -d \
+            --name app-under-test \
+            --network host \
+            -e PORT="${{ inputs.port }}" \
+            -e DATABASE_URL="postgres://appuser:apppassword@127.0.0.1:5432/appdb?sslmode=disable" \
+            -e ENVIRONMENT="test" \
+            -e OTEL_EXPORTER_OTLP_INSECURE="true" \
+            -e AWS_REGION="us-east-1" \
+            ${{ inputs.image_name }}:${{ inputs.image_tag }}
+
+      - name: "Healthcheck — Aguardar prontidão da API"
+        run: |
+          TARGET_URL="http://127.0.0.1:${{ inputs.port }}${{ inputs.health_endpoint }}"
+          echo "[DAST] Aguardando prontidão em $TARGET_URL ..."
+          READY=0
+          for i in $(seq 1 30); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL" || true)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Serviço pronto e respondendo HTTP 200 (tentativa $i/30)."
+              READY=1
+              break
+            fi
+            echo "Aguardando inicialização (tentativa $i/30 - status: $HTTP_CODE)..."
+            sleep 2
+          done
+
+          if [ "$READY" -ne 1 ]; then
+            echo "❌ Timeout aguardando inicialização do serviço. Exibindo logs do container:"
+            docker logs app-under-test || true
+            exit 1
+          fi
+
+      - name: "OWASP ZAP — Executar Varredura DAST Dinâmica"
+        run: |
+          mkdir -p zap-out
+          chmod 777 zap-out
+
+          SCAN_MODE="${{ inputs.scan_mode }}"
+          OPENAPI_PATH="${{ inputs.openapi_file }}"
+          PORT="${{ inputs.port }}"
+
+          echo "=========================================================="
+          echo "  Iniciando OWASP ZAP DAST Scan"
+          echo "  Modo: $SCAN_MODE | Porta: $PORT"
+          echo "=========================================================="
+
+          # Execução ZAP com network host para alcançar 127.0.0.1:<porta>
+          if [ "$SCAN_MODE" = "api" ] && [ -n "$OPENAPI_PATH" ]; then
+            echo "[DAST] Executando zap-api-scan.py baseado em OpenAPI: $OPENAPI_PATH"
+            
+            # Se for arquivo local no repo vs URL HTTP
+            if [[ "$OPENAPI_PATH" =~ ^https?:// ]]; then
+              docker run --rm --network host -v "$(pwd)/zap-out:/zap/wrk/:rw" \
+                -t ghcr.io/zaproxy/zaproxy:stable \
+                zap-api-scan.py -t "$OPENAPI_PATH" -f openapi \
+                -J zap-report.json -r zap-report.html -m 3 || true
+            else
+              docker run --rm --network host -v "$(pwd):/zap/wrk/:rw" \
+                -t ghcr.io/zaproxy/zaproxy:stable \
+                zap-api-scan.py -t "/zap/wrk/$OPENAPI_PATH" -f openapi \
+                -J zap-report.json -r zap-report.html -m 3 || true
+              cp zap-report.json zap-out/ || true
+              cp zap-report.html zap-out/ || true
+            fi
+          else
+            echo "[DAST] Executando zap-baseline.py em http://127.0.0.1:$PORT"
+            docker run --rm --network host -v "$(pwd)/zap-out:/zap/wrk/:rw" \
+              -t ghcr.io/zaproxy/zaproxy:stable \
+              zap-baseline.py -t "http://127.0.0.1:$PORT" \
+              -J zap-report.json -r zap-report.html -m 3 || true
+          fi
+
+          if [ -f "zap-out/zap-report.json" ]; then
+            cp zap-out/zap-report.json zap-report.json
+          elif [ -f "zap-report.json" ]; then
+            cp zap-report.json zap-out/
+          else
+            echo '{"@programName":"ZAP","site":[]}' > zap-report.json
+          fi
+
+          if [ -f "zap-out/zap-report.html" ]; then
+            cp zap-out/zap-report.html zap-report.html
+          fi
+
+      - name: "Publicar Relatório no GitHub Step Summary"
+        if: always()
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          report_file = "zap-report.json"
+          summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+          if not summary_path or not os.path.isfile(report_file):
+              sys.exit(0)
+
+          try:
+              with open(report_file, "r", encoding="utf-8") as f:
+                  data = json.load(f)
+          except Exception:
+              data = {}
+
+          site_raw = data.get("site", [])
+          site_list = [site_raw] if isinstance(site_raw, dict) else (site_raw or [])
+          
+          alerts = []
+          for site in site_list:
+              if isinstance(site, dict):
+                  al = site.get("alerts", [])
+                  alerts.extend([al] if isinstance(al, dict) else (al or []))
+
+          by_sev = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFORMATIONAL": 0}
+          for a in alerts:
+              sev = a.get("riskdesc", "LOW").split(" ")[0].upper()
+              by_sev[sev] = by_sev.get(sev, 0) + 1
+
+          with open(summary_path, "a", encoding="utf-8") as f:
+              f.write("## 🌐 OWASP ZAP DAST — Resumo da Varredura Dinâmica\n\n")
+              f.write(f"- **Total de Alertas Identificados:** `{len(alerts)}`\n")
+              f.write(f"- 🔴 **High:** `{by_sev.get('HIGH', 0)}`\n")
+              f.write(f"- 🟠 **Medium:** `{by_sev.get('MEDIUM', 0)}`\n")
+              f.write(f"- 🟡 **Low:** `{by_sev.get('LOW', 0)}`\n")
+              f.write(f"- ℹ️ **Informational:** `{by_sev.get('INFORMATIONAL', 0)}`\n\n")
+              
+              if alerts:
+                  f.write("| Alerta | Severidade | Descrição |\n")
+                  f.write("|---|---|---|\n")
+                  for a in alerts[:15]:
+                      name = a.get("name", a.get("alert", "Vulnerabilidade"))
+                      sev = a.get("riskdesc", "LOW").split(" ")[0]
+                      desc = a.get("desc", "").replace("\n", " ")[:90]
+                      f.write(f"| `{name}` | **{sev}** | {desc}... |\n")
+              else:
+                  f.write("✅ **Nenhuma vulnerabilidade ou cabeçalho inseguro detectado pelo ZAP.**\n")
+          PYEOF
+
+      - name: "Upload Artifacts — Relatórios ZAP (HTML & JSON)"
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-dast-report-${{ inputs.service_name }}
+          path: |
+            zap-report.json
+            zap-report.html
+          retention-days: 14
+
+      - name: "AI Triage & Issue — OWASP ZAP DAST"
+        if: always()
+        uses: ./.github/actions/ai-issue-analyzer
+        with:
+          scan-type: dast
+          tool-name: "OWASP ZAP"
+          report-file: zap-report.json
+          service-name: ${{ inputs.service_name }}
+          service-path: ${{ inputs.service_path }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          github-token: ${{ secrets.TOKEN }}
+          output-file: issue-dast.md
+
+      - name: "Verificar Bloqueio de Pipeline (Se ativado)"
+        if: inputs.block_on_critical == true
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+
+          with open("zap-report.json") as f:
+              data = json.load(f)
+
+          site_raw = data.get("site", [])
+          site_list = [site_raw] if isinstance(site_raw, dict) else (site_raw or [])
+          
+          blocking = 0
+          for site in site_list:
+              if isinstance(site, dict):
+                  for a in site.get("alerts", []):
+                      sev = a.get("riskdesc", "").split(" ")[0].upper()
+                      if sev in ["HIGH", "CRITICAL"]:
+                          blocking += 1
+
+          if blocking > 0:
+              print(f"❌ BLOQUEIO: {blocking} achado(s) HIGH/CRITICAL detectado(s) pelo DAST.")
+              sys.exit(1)
+
+          print("✅ Nenhum achado HIGH/CRITICAL impeditivo no DAST. Pipeline liberada.")
+          PYEOF
+
+      - name: "Teardown — Limpeza dos Containers de Teste"
+        if: always()
+        run: |
+          echo "[DAST Teardown] Encerrando container de aplicação..."
+          docker stop app-under-test > /dev/null 2>&1 || true
+          docker rm app-under-test > /dev/null 2>&1 || true
