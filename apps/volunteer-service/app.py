@@ -8,8 +8,8 @@ import boto3
 from flask import Flask, jsonify, request
 
 
-def setup_logging(service_name: str, service_namespace: str) -> logging.Logger:
-    """Configura logging local e exporter OpenTelemetry para envio ao Loki."""
+def setup_telemetry(service_name: str, service_namespace: str):
+    """Configura logging (Loki) e métricas (Prometheus) via OpenTelemetry Collector."""
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
@@ -24,7 +24,9 @@ def setup_logging(service_name: str, service_namespace: str) -> logging.Logger:
         "opentelemetry-collector.monitoring-ns.svc.cluster.local:4317",
     )
     insecure = os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() != "false"
+    pod_name = os.getenv("POD_NAME", "unknown")
 
+    # 1. OpenTelemetry Logging (Loki)
     try:
         from opentelemetry._logs import set_logger_provider
         from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
@@ -34,20 +36,22 @@ def setup_logging(service_name: str, service_namespace: str) -> logging.Logger:
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
         from opentelemetry.sdk.resources import Resource
 
-        resource = Resource.create(
+        log_resource = Resource.create(
             {
                 "service.name": os.getenv("OTEL_SERVICE_NAME", service_name),
                 "service.namespace": service_namespace,
                 "deployment.environment": os.getenv("ENVIRONMENT", "production"),
+                "pod": pod_name,
+                "k8s.pod.name": pod_name,
             }
         )
 
-        logger_provider = LoggerProvider(resource=resource)
+        logger_provider = LoggerProvider(resource=log_resource)
         set_logger_provider(logger_provider)
 
-        exporter = OTLPLogExporter(endpoint=otel_endpoint, insecure=insecure)
+        log_exporter = OTLPLogExporter(endpoint=otel_endpoint, insecure=insecure)
         logger_provider.add_log_record_processor(
-            BatchLogRecordProcessor(exporter)
+            BatchLogRecordProcessor(log_exporter)
         )
 
         has_otel = any(isinstance(h, LoggingHandler) for h in root_logger.handlers)
@@ -66,9 +70,58 @@ def setup_logging(service_name: str, service_namespace: str) -> logging.Logger:
             "Falha ao inicializar OpenTelemetry logging: %s", exc
         )
 
-    return root_logger
+    # 2. OpenTelemetry Metrics (Prometheus via OTel Collector)
+    requests_counter = None
+    latency_histogram = None
+    try:
+        from opentelemetry import metrics
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+            OTLPMetricExporter,
+        )
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.sdk.resources import Resource
 
+        metric_resource = Resource.create(
+            {
+                "service.name": os.getenv("OTEL_SERVICE_NAME", service_name),
+                "service.namespace": service_namespace,
+                "deployment.environment": os.getenv("ENVIRONMENT", "production"),
+                "pod": pod_name,
+                "k8s.pod.name": pod_name,
+            }
+        )
 
+        metric_exporter = OTLPMetricExporter(endpoint=otel_endpoint, insecure=insecure)
+        reader = PeriodicExportingMetricReader(
+            metric_exporter, export_interval_millis=5000
+        )
+        meter_provider = MeterProvider(
+            resource=metric_resource, metric_readers=[reader]
+        )
+        metrics.set_meter_provider(meter_provider)
+        meter = metrics.get_meter(service_name)
+
+        requests_counter = meter.create_counter(
+            "http_requests_total",
+            description="Total number of HTTP requests processed",
+        )
+        latency_histogram = meter.create_histogram(
+            "http_server_duration_milliseconds",
+            description="Duration of HTTP requests in milliseconds",
+            unit="ms",
+        )
+        root_logger.info(
+            "OpenTelemetry metrics inicializado para %s -> %s",
+            service_name,
+            otel_endpoint,
+        )
+    except Exception as exc:
+        root_logger.warning(
+            "Falha ao inicializar OpenTelemetry metrics: %s", exc
+        )
+
+    return root_logger, requests_counter, latency_histogram
 # Inicialização do New Relic Agent com suporte a AI Monitoring (AIM)
 try:
     import newrelic.agent
@@ -79,9 +132,44 @@ except Exception as nr_err:
         "New Relic initialization skipped or failed: %s", nr_err
     )
 
-log = setup_logging("volunteer-service", "volunteer-ns")
+log, requests_counter, latency_histogram = setup_telemetry("volunteer-service", "volunteer-ns")
 
 app = Flask(__name__)
+
+@app.before_request
+def before_request():
+    request._start_time = time.time()
+
+
+@app.after_request
+def after_request(response):
+    try:
+        start_time = getattr(request, "_start_time", None)
+        duration_ms = (time.time() - start_time) * 1000 if start_time else 0.0
+        status_str = str(response.status_code)
+        pod_name = os.getenv("POD_NAME", "unknown")
+        service_name = os.getenv("OTEL_SERVICE_NAME", "volunteer-service")
+        route = request.path
+
+        attrs = {
+            "service_name": service_name,
+            "status": status_str,
+            "http_status_code": status_str,
+            "http_response_status_code": status_str,
+            "http_method": request.method,
+            "http_request_method": request.method,
+            "http_route": route,
+            "pod": pod_name,
+        }
+
+        if requests_counter:
+            requests_counter.add(1, attrs)
+        if latency_histogram:
+            latency_histogram.record(duration_ms, attrs)
+    except Exception as e:
+        log.warning("Erro ao registrar métricas HTTP: %s", e)
+    return response
+
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 DYNAMODB_TABLE = os.getenv("AWS_DYNAMODB_TABLE")

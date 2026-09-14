@@ -19,10 +19,10 @@ spec:
       steps:
       - setWeight: 20
       - pause:
-          duration: 2m
+          duration: 3m
       - setWeight: 50
       - pause:
-          duration: 2m
+          duration: 3m
   selector:
     matchLabels:
       app: volunteer-service
@@ -66,6 +66,12 @@ spec:
         ports:
         - containerPort: 8083
         env:
+        - name: TEST_REVISION
+          value: "v2-canary-test-erro"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:

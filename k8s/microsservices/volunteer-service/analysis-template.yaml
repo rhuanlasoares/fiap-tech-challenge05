@@ -9,9 +9,10 @@ spec:
   metrics:
     # 1. 🚨 Verifica Taxa de Sucesso exclusiva dos Pods Canary
     - name: success-rate
-      interval: 30s
+      interval: 20s
       successCondition: len(result) == 0 || result[0] >= 0.95
-      failureLimit: 3
+      failureLimit: 1
+      consecutiveErrorLimit: 10
       provider:
         prometheus:
           address: http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090
@@ -24,9 +25,10 @@ spec:
 
     # 2. ⏱️ Verifica Latência P95 exclusiva dos Pods Canary
     - name: latency-p95
-      interval: 30s
+      interval: 20s
       successCondition: len(result) == 0 || result[0] <= 500
-      failureLimit: 3
+      failureLimit: 1
+      consecutiveErrorLimit: 10
       provider:
         prometheus:
           address: http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090

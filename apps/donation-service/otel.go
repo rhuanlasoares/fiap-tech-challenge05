@@ -182,6 +182,14 @@ func createResource(ctx context.Context, serviceName string) (*sdkresource.Resou
 		}
 	}
 
+	podName := os.Getenv("POD_NAME")
+	if podName != "" {
+		attrs = append(attrs,
+			attribute.String("pod", podName),
+			attribute.String("k8s.pod.name", podName),
+		)
+	}
+
 	return sdkresource.New(
 		ctx,
 		sdkresource.WithAttributes(attrs...),
@@ -365,7 +373,19 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 			span.SetStatus(codes.Ok, "")
 		}
 
+		podName := os.Getenv("POD_NAME")
+		if podName == "" {
+			podName = "unknown"
+		}
+		serviceName := os.Getenv("OTEL_SERVICE_NAME")
+		if serviceName == "" {
+			serviceName = "donation-service"
+		}
+
 		attrs := metric.WithAttributes(
+			attribute.String("service_name", serviceName),
+			attribute.String("status", statusStr),
+			attribute.String("pod", podName),
 			attribute.String("http.method", r.Method),
 			attribute.String("http.request.method", r.Method),
 			attribute.String("http.route", route),
