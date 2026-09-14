@@ -29,9 +29,8 @@ def setup_telemetry(service_name: str, service_namespace: str):
     # 1. OpenTelemetry Logging (Loki)
     try:
         from opentelemetry._logs import set_logger_provider
-        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
-            OTLPLogExporter,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import \
+            OTLPLogExporter
         from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
         from opentelemetry.sdk.resources import Resource
@@ -50,9 +49,7 @@ def setup_telemetry(service_name: str, service_namespace: str):
         set_logger_provider(logger_provider)
 
         log_exporter = OTLPLogExporter(endpoint=otel_endpoint, insecure=insecure)
-        logger_provider.add_log_record_processor(
-            BatchLogRecordProcessor(log_exporter)
-        )
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
 
         has_otel = any(isinstance(h, LoggingHandler) for h in root_logger.handlers)
         if not has_otel:
@@ -66,20 +63,18 @@ def setup_telemetry(service_name: str, service_namespace: str):
             otel_endpoint,
         )
     except Exception as exc:
-        root_logger.warning(
-            "Falha ao inicializar OpenTelemetry logging: %s", exc
-        )
+        root_logger.warning("Falha ao inicializar OpenTelemetry logging: %s", exc)
 
     # 2. OpenTelemetry Metrics (Prometheus via OTel Collector)
     requests_counter = None
     latency_histogram = None
     try:
         from opentelemetry import metrics
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
-            OTLPMetricExporter,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import \
+            OTLPMetricExporter
         from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.sdk.metrics.export import \
+            PeriodicExportingMetricReader
         from opentelemetry.sdk.resources import Resource
 
         metric_resource = Resource.create(
@@ -117,11 +112,11 @@ def setup_telemetry(service_name: str, service_namespace: str):
             otel_endpoint,
         )
     except Exception as exc:
-        root_logger.warning(
-            "Falha ao inicializar OpenTelemetry metrics: %s", exc
-        )
+        root_logger.warning("Falha ao inicializar OpenTelemetry metrics: %s", exc)
 
     return root_logger, requests_counter, latency_histogram
+
+
 # Inicialização do New Relic Agent com suporte a AI Monitoring (AIM)
 try:
     import newrelic.agent
@@ -132,9 +127,12 @@ except Exception as nr_err:
         "New Relic initialization skipped or failed: %s", nr_err
     )
 
-log, requests_counter, latency_histogram = setup_telemetry("volunteer-service", "volunteer-ns")
+log, requests_counter, latency_histogram = setup_telemetry(
+    "volunteer-service", "volunteer-ns"
+)
 
 app = Flask(__name__)
+
 
 @app.before_request
 def before_request():
