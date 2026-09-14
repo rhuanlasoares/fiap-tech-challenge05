@@ -123,9 +123,9 @@ jobs:
             -e OTEL_EXPORTER_OTLP_INSECURE="true" \
             -e OTEL_SDK_DISABLED="true" \
             -e AWS_REGION="us-east-1" \
-            -e AWS_DYNAMODB_TABLE="volunteers" \
-            -e AWS_ACCESS_KEY_ID="testing" \
-            -e AWS_SECRET_ACCESS_KEY="testing" \
+            -e AWS_DYNAMODB_TABLE="${{ secrets.DYNAMODB_TABLE }}" \
+            -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
             ${{ inputs.image_name }}:${{ inputs.image_tag }}
 
       - name: "Healthcheck — Aguardar prontidão da API"
