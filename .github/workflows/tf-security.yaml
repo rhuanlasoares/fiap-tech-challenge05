@@ -12,6 +12,14 @@ on:
         type: boolean
         required: true
         default: true
+      language:
+        description: "Idioma para a análise de IA e geração da Issue"
+        type: choice
+        options:
+          - pt-BR
+          - en-US
+        required: false
+        default: pt-BR
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha || github.ref }}
@@ -25,6 +33,7 @@ permissions:
 env:
   DEFAULT_BLOCK_ON_CRITICAL: "true"
   BLOCK_ON_CRITICAL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.block_on_critical || vars.TF_BLOCK_ON_CRITICAL || 'true' }}
+  LANGUAGE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.language || vars.TF_SCAN_LANGUAGE || 'pt-BR' }}
 
 jobs:
   tf-security:
@@ -73,6 +82,7 @@ jobs:
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           output-file: "iac/terraform/issue-tf-security.md"
+          language: ${{ env.LANGUAGE }}
 
       - name: Avaliar Severidade e Bloqueio Parametrizado
         id: check-blocking
@@ -85,6 +95,7 @@ jobs:
           echo " Severidade Máxima : ${{ steps.ai_issue.outputs.max-severity || 'NENHUMA' }}"
           echo " Issue Criada/Mod. : ${{ steps.ai_issue.outputs.create-issue || 'false' }}"
           echo " Bloqueio Ativo    : ${{ env.BLOCK_ON_CRITICAL }}"
+          echo " Idioma Selecionado: ${{ env.LANGUAGE }}"
           echo "=========================================================="
 
           MAX_SEV="${{ steps.ai_issue.outputs.max-severity }}"

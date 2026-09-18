@@ -243,41 +243,55 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
                 target = res.get("Target", "terraform")
                 for conf in res.get("Misconfigurations", []) or []:
                     cause = conf.get("CauseMetadata", {})
-                    start_line = cause.get("StartLine", "")
-                    loc = f"{target}:{start_line}" if start_line else target
+                    start_l = cause.get("StartLine", "")
+                    end_l = cause.get("EndLine", "")
+                    line_span = f"{start_l}-{end_l}" if start_l and end_l and start_l != end_l else str(start_l)
+                    loc = f"{target}:{line_span}" if line_span else target
+                    resource_name = cause.get("Resource", "")
                     code_lines = cause.get("Code", {}).get("Lines", [])
                     code_snippet = ""
                     if code_lines:
                         code_snippet = "\n".join([f"{l.get('Number')}: {l.get('Content', '').rstrip()}" for l in code_lines if l.get("Content")])
 
-                    desc = conf.get("Description", "Sem descrição.")
-                    msg = conf.get("Message", "")
-                    full_desc = f"{msg}\n{desc}" if msg and msg != desc else desc
-                    if code_snippet:
-                        full_desc += f"\n\nCódigo afetado:\n```hcl\n{code_snippet}\n```"
+                    raw_desc = conf.get("Description", "").strip()
+                    raw_msg = conf.get("Message", "").strip()
+                    raw_title = conf.get("Title", "Configuração Insegura de Infraestrutura")
+                    raw_resol = conf.get("Resolution", "Ajustar configuração nos arquivos HCL do Terraform.")
+
+                    full_desc = f"{raw_msg}. {raw_desc}" if raw_msg and raw_msg not in raw_desc else (raw_desc or raw_msg or "Configuração insegura detectada.")
 
                     findings.append({
                         "id": conf.get("ID", "IAC-MISCONFIG"),
                         "component": loc,
+                        "resource": resource_name,
                         "severity": conf.get("Severity", "LOW").upper(),
-                        "title": conf.get("Title", "Configuração Insegura de Infraestrutura"),
+                        "title": raw_title,
                         "description": full_desc.strip(),
-                        "remediation": conf.get("Resolution", "Ajustar configuração nos arquivos HCL do Terraform.")
+                        "affected_code": code_snippet,
+                        "how_to_improve": raw_resol,
+                        "remediation": raw_resol,
+                        "primary_url": conf.get("PrimaryURL", "")
                     })
         # B. Formato nativo TFSec (JSON com chave 'results')
         elif "results" in data and isinstance(data.get("results"), list):
             for r in data.get("results", []):
                 loc_data = r.get("location", {})
                 fn = loc_data.get("filename", "terraform")
-                ln = loc_data.get("start_line", "")
-                comp = f"{fn}:{ln}" if ln else fn
+                start_l = loc_data.get("start_line", "")
+                end_l = loc_data.get("end_line", "")
+                line_span = f"{start_l}-{end_l}" if start_l and end_l and start_l != end_l else str(start_l)
+                comp = f"{fn}:{line_span}" if line_span else fn
                 findings.append({
                     "id": r.get("rule_id") or r.get("long_id", "TFSEC-RULE"),
                     "component": comp,
+                    "resource": r.get("resource", ""),
                     "severity": r.get("severity", "LOW").upper(),
                     "title": r.get("rule_description") or r.get("description", "Vulnerabilidade IaC"),
                     "description": f"{r.get('explanation', '')} {r.get('description', '')}".strip(),
-                    "remediation": r.get("resolution", "Ajustar os parâmetros inseguros do recurso Terraform.")
+                    "affected_code": "",
+                    "how_to_improve": r.get("resolution", "Ajustar os parâmetros inseguros do recurso Terraform."),
+                    "remediation": r.get("resolution", "Ajustar os parâmetros inseguros do recurso Terraform."),
+                    "primary_url": r.get("links", [""])[0] if r.get("links") else ""
                 })
         # C. Formato Checkov (JSON com chave 'results.failed_checks')
         elif "results" in data and isinstance(data.get("results"), dict):
@@ -285,26 +299,32 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
             for fc in failed:
                 fp = fc.get("file_path", "terraform")
                 lines = fc.get("file_line_range", [])
-                comp = f"{fp}:{lines[0]}" if lines else fp
+                lines_str = f"{lines[0]}-{lines[1]}" if len(lines) > 1 else str(lines[0]) if lines else ""
+                comp = f"{fp}:{lines_str}" if lines_str else fp
                 findings.append({
                     "id": fc.get("check_id", "CKV-RULE"),
                     "component": comp,
+                    "resource": fc.get("resource", ""),
                     "severity": (fc.get("severity") or "HIGH").upper(),
                     "title": fc.get("check_name", "Violação de Política IaC"),
                     "description": f"{fc.get('check_name', '')} no arquivo {fp}.",
-                    "remediation": fc.get("guideline") or "Revisar diretrizes do Checkov e corrigir a configuração."
+                    "affected_code": "",
+                    "how_to_improve": fc.get("guideline") or "Revisar diretrizes do Checkov e corrigir a configuração.",
+                    "remediation": fc.get("guideline") or "Revisar diretrizes do Checkov e corrigir a configuração.",
+                    "primary_url": ""
                 })
 
     return findings
 
 
-def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-1.5-flash") -> dict:
+def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-2.5-flash") -> dict:
     """Chama a API do Google AI Studio com Structured JSON Output."""
-    models_to_try = [model, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+    models_to_try = [model, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
     seen = set()
-    models = [m for m in models_to_try if not (m in seen or seen.add(m))]
+    models = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
 
     for m in models:
+        print(f"[ai-issue-analyzer] Tentando modelo Gemini '{m}' via Google AI Studio...")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
@@ -318,34 +338,110 @@ def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-1.5-flash") 
             with urllib.request.urlopen(req, timeout=45) as resp:
                 result_json = json.loads(resp.read().decode("utf-8"))
                 text_response = result_json.get("candidates", [])[0].get("content", {}).get("parts", [])[0].get("text", "")
-                return json.loads(text_response)
+                if text_response:
+                    parsed = json.loads(text_response)
+                    print(f"[ai-issue-analyzer] ✅ Sucesso! Análise recebida com sucesso do modelo '{m}'.")
+                    return parsed
         except Exception as e:
-            print(f"[ai-issue-analyzer] Falha com modelo {m}: {e}")
+            print(f"[ai-issue-analyzer] ❌ Falha com modelo '{m}': {e}")
     return None
 
 
+def translate_iac_term_pt(text: str) -> str:
+    """Traduz termos comuns de segurança e remediação de IaC para Português do Brasil."""
+    if not text:
+        return ""
+    t = text
+    subs = [
+        (r'(?i)An ingress security group rule allows traffic from /0', 'Regra de entrada (ingress) de firewall permite tráfego irrestrito de 0.0.0.0/0'),
+        (r'(?i)Opening up ports to the public internet is generally to be avoided', 'A exposição de portas para a internet pública (0.0.0.0/0) deve ser evitada para impedir ataques e explorações diretas'),
+        (r'(?i)Set a more restrictive CIDR range in the firewall rule', 'Defina uma faixa CIDR restrita aos IPs corporativos autorizados ou utilize o Google Cloud IAP (Identity-Aware Proxy)'),
+        (r'(?i)Ensure that Cloud SQL database instances are not open to the world', 'Garanta que instâncias de banco de dados Cloud SQL não estejam abertas para o mundo (0.0.0.0/0)'),
+        (r'(?i)Ensure that Cloud Storage buckets have uniform bucket-level access enabled', 'Garanta que os buckets do Cloud Storage tenham o controle de acesso uniforme ativado (uniform_bucket_level_access = true)'),
+        (r'(?i)Ensure that Private Google Access is enabled for subnetworks', 'Habilite o Acesso Privado do Google (private_ip_google_access = true) na sub-rede'),
+        (r'(?i)Ensure that GKE Cluster is not running with default service account', 'Evite executar o cluster GKE com a Service Account padrão do Compute Engine; use uma conta dedicada com privilégios mínimos'),
+        (r'(?i)Ensure that GKE has Stackdriver Logging enabled', 'Habilite a coleta de logs do Cloud Operations (Stackdriver Logging) no GKE'),
+        (r'(?i)Ensure that GKE has Stackdriver Monitoring enabled', 'Habilite as métricas do Cloud Operations (Stackdriver Monitoring) no GKE'),
+        (r'(?i)Ensure that Cloud SQL instances have SSL/TLS enabled', 'Exija conexões criptografadas via SSL/TLS nas instâncias do Cloud SQL'),
+        (r'(?i)Ensure that security groups do not allow unrestricted ingress', 'Restrinja as regras de entrada de security groups/firewall para faixas restritas'),
+        (r'(?i)to be avoided', 'deve ser evitado'),
+        (r'(?i)ensure that', 'garanta que'),
+        (r'(?i)must be enabled', 'deve estar habilitado'),
+        (r'(?i)should not be exposed', 'não deve ser exposto'),
+    ]
+    for pattern, repl in subs:
+        t = re.sub(pattern, repl, t)
+    return t
+
+
 def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, findings: list, language: str = "pt-BR") -> dict:
-    """Gera estrutura padrão caso a API do Gemini falhe ou não possua chave."""
+    """Gera estrutura padrão e localizada caso a API do Gemini falhe ou não possua chave."""
     sev_counts = {f.get("severity", "LOW"): True for f in findings}
     max_sev = "CRITICAL" if "CRITICAL" in sev_counts else "HIGH" if "HIGH" in sev_counts else "MEDIUM" if "MEDIUM" in sev_counts else "LOW"
 
     is_pt = language.lower() in ["pt-br", "pt", "portugues", "português"]
+    is_iac = scan_type.lower() == "iac"
+
+    processed_findings = []
+    for f in findings[:20]:
+        item = dict(f)
+        if is_pt and is_iac:
+            item["title"] = translate_iac_term_pt(item.get("title", ""))
+            item["description"] = translate_iac_term_pt(item.get("description", ""))
+            how = translate_iac_term_pt(item.get("how_to_improve", "") or item.get("remediation", ""))
+            item["how_to_improve"] = how
+            item["remediation"] = how
+
+            # Se for regra de firewall 0.0.0.0/0, sugere exemplo de correção
+            if "0.0.0.0/0" in str(item.get("description", "")) or "ingress" in str(item.get("title", "")).lower():
+                item["suggested_fix_code"] = (
+                    "# Exemplo de correção recomendada em HCL (Terraform):\n"
+                    "resource \"google_compute_firewall\" \"allow_restricted\" {\n"
+                    "  name    = \"allow-ssh-iap\"\n"
+                    "  network = google_compute_network.vpc.name\n"
+                    "  allow {\n"
+                    "    protocol = \"tcp\"\n"
+                    "    ports    = [\"22\"]\n"
+                    "  }\n"
+                    "  # Permitir apenas a faixa segura do Google Cloud IAP:\n"
+                    "  source_ranges = [\"35.235.240.0/20\"]\n"
+                    "}"
+                )
+            elif "uniform_bucket_level_access" in str(item.get("description", "")).lower() or "bucket" in str(item.get("component", "")).lower():
+                item["suggested_fix_code"] = (
+                    "# Exemplo de correção recomendada em HCL (Terraform):\n"
+                    "resource \"google_storage_bucket\" \"example\" {\n"
+                    "  name                        = \"meu-bucket-seguro\"\n"
+                    "  location                    = \"SOUTHAMERICA-EAST1\"\n"
+                    "  uniform_bucket_level_access = true\n"
+                    "}"
+                )
+        processed_findings.append(item)
+
     if is_pt:
+        component_type = "componente de infraestrutura (IaC)" if is_iac else f"microsserviço {service_name}"
         return {
             "should_create_issue": True,
             "max_severity": max_sev,
-            "title_summary": f"{len(findings)} achados detectados ({max_sev})",
-            "executive_summary": f"Identificados {len(findings)} achados de segurança/qualidade na ferramenta {tool_name} para o microsserviço {service_name}.",
-            "findings": findings[:20],
-            "action_checklist": ["Revisar vulnerabilidades e cabeçalhos de segurança apontados", "Aplicar correções recomendadas no código ou configuração"]
+            "title_summary": f"{len(findings)} vulnerabilidade(s) detectada(s) ({max_sev})",
+            "executive_summary": f"Identificados {len(findings)} apontamento(s) de segurança/conformidade na ferramenta {tool_name} para o {component_type}. Revise as vulnerabilidades indicadas e aplique as correções recomendadas no código Terraform HCL.",
+            "findings": processed_findings,
+            "action_checklist": [
+                "Revisar os recursos de infraestrutura e parâmetros apontados no código Terraform",
+                "Substituir regras abertas (ex: 0.0.0.0/0) por faixas restritas ou Cloud IAP",
+                "Aplicar as correções nos arquivos .tf e executar terraform validate antes do commit"
+            ] if is_iac else [
+                "Revisar vulnerabilidades e cabeçalhos de segurança apontados",
+                "Aplicar correções recomendadas no código ou configuração"
+            ]
         }
     else:
         return {
             "should_create_issue": True,
             "max_severity": max_sev,
             "title_summary": f"{len(findings)} findings detected ({max_sev})",
-            "executive_summary": f"Identified {len(findings)} findings in tool {tool_name} for microservice {service_name}.",
-            "findings": findings[:20],
+            "executive_summary": f"Identified {len(findings)} findings in tool {tool_name} for {service_name}.",
+            "findings": processed_findings,
             "action_checklist": ["Review reported vulnerabilities and security headers", "Apply recommended fixes in service code or configuration"]
         }
 
@@ -382,16 +478,25 @@ def main():
     ai_result = None
     if args.gemini_api_key:
         prompt = f"""
-Você é um especialista sênior em DevSecOps e AppSec. Analise os achados da ferramenta '{args.tool_name}' ({args.scan_type.upper()}) para o microsserviço '{args.service_name}'.
+Você é um especialista sênior em DevSecOps, AppSec e Engenharia de Infraestrutura em Nuvem (Terraform/IaC).
+Analise com rigor técnico os achados da ferramenta '{args.tool_name}' ({args.scan_type.upper()}) para o componente '{args.service_name}'.
 Achados brutos ({len(findings)} itens): {json.dumps(findings[:25], ensure_ascii=False)}
 
-DIRETRIZES DE RESPOSTA E IDIOMA:
-1. IDIOMA OBRIGATÓRIO: Você DEVE responder ESTRITAMENTE em {lang_name}. Todos os campos de texto no JSON ('title_summary', 'executive_summary', 'description', 'remediation', 'action_checklist') DEVEM estar em {lang_name}. Mesmo que as descrições brutas da ferramenta estejam em inglês, TRADUZA E EXPLIQUE em {lang_name}.
-2. Avalie com precisão técnica se os achados justificam a abertura de uma Issue ('should_create_issue').
-3. Defina a severidade máxima consolidada ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO').
-4. 'executive_summary': Crie um resumo executivo direto e técnico em {lang_name} (1 parágrafo claro explicando o impacto real).
-5. 'action_checklist': Forneça um array com ações diretas e imperativas em {lang_name} (ex: "Configurar cabeçalho X-Content-Type-Options: nosniff", "Definir Content-Security-Policy", "Atualizar dependência vulnerável").
-6. DIRETRIZ IAC / TERRAFORM: Se o scan-type for 'IAC', explique os riscos de arquitetura em nuvem (exposição pública, dados sem criptografia, falha de IAM/least privilege) e no campo 'remediation' detalhe como solucionar fornecendo exemplos práticos em HCL (Terraform).
+DIRETRIZES FUNDAMENTAIS DE IDIOMA E LOCALIZAÇÃO:
+1. IDIOMA MANDATÓRIO: Você DEVE responder ESTRITAMENTE em {lang_name}.
+   - NUNCA retorne títulos, resumos, descrições ou soluções em inglês.
+   - Todos os textos explicativos ('title_summary', 'executive_summary', 'title', 'description', 'how_to_improve', 'action_checklist') DEVEM estar 100% em {lang_name}.
+   - Traduza termos técnicos em inglês para português claro e profissional.
+
+DIRETRIZES DE SOLUÇÃO, LOCAL AFETADO E CÓDIGO TERRAFORM HCL:
+2. Para CADA achado no array 'findings':
+   - 'component': Mantenha o caminho exato do arquivo e linha(s) afetada(s) (ex: iac/terraform/modules/vpc/main.tf:45-52).
+   - 'resource': Nome do recurso Terraform analisado (ex: google_compute_firewall.allow_ssh).
+   - 'title': Título curto e objetivo em {lang_name} resumindo o problema.
+   - 'description': Explique detalhadamente em {lang_name} o risco real em nuvem (ex: por que abrir 0.0.0.0/0 é perigoso, impacto de bucket público, falta de TLS, etc.).
+   - 'affected_code': Mostre o trecho de código vulnerável atual (se disponível).
+   - 'how_to_improve': Explique em {lang_name} o passo a passo de como solucionar e melhorar a infraestrutura.
+   - 'suggested_fix_code': Forneça o bloco de código Terraform HCL CORRIGIDO completo (com comentários em {lang_name} explicando os parâmetros ajustados).
 
 Responda ESTRITAMENTE neste formato JSON schema:
 {{
@@ -400,7 +505,17 @@ Responda ESTRITAMENTE neste formato JSON schema:
   "title_summary": "resumo conciso para o título da issue em {lang_name}",
   "executive_summary": "resumo executivo do impacto em {lang_name}",
   "findings": [
-    {{ "id": "ID-REGRA", "component": "endpoint_ou_arquivo", "severity": "HIGH", "description": "explicação do problema em {lang_name}", "remediation": "como corrigir em {lang_name}" }}
+    {{
+      "id": "AVD-GCP-0001",
+      "component": "iac/terraform/modules/vpc/main.tf:45-52",
+      "resource": "google_compute_firewall.allow_ssh",
+      "severity": "HIGH",
+      "title": "Regra de firewall permite tráfego público irrestrito (0.0.0.0/0)",
+      "description": "Explicação em {lang_name} do risco de segurança e impacto...",
+      "affected_code": "resource \"google_compute_firewall\" \"allow_ssh\" { ... }",
+      "how_to_improve": "Explicação em {lang_name} de como melhorar...",
+      "suggested_fix_code": "resource \"google_compute_firewall\" \"allow_ssh\" {{\\n  # Exemplo de código HCL seguro...\\n}}"
+    }}
   ],
   "action_checklist": ["Ação corretiva 1 em {lang_name}", "Ação corretiva 2 em {lang_name}"]
 }}
@@ -483,42 +598,108 @@ Responda ESTRITAMENTE neste formato JSON schema:
     for task in ai_result.get("action_checklist", []):
         md.append(f"- [ ] {task}")
 
-    md.extend([
-        "",
-        sec_details,
-        "",
-        table_headers,
-        "|---|---|---|---|"
-    ])
-
-    for f in ai_result.get("findings", []):
-        f_id = f.get("id", "N/A")
-        comp = f.get("component", "N/A")
-        sev = f.get("severity", "UNKNOWN")
-        remed = f.get("remediation", "").replace("\n", " ")
-        md.append(f"| `{f_id}` | `{comp}` | **{sev}** | {remed} |")
-
-    md.extend([
-        "",
-        "<details>",
-        expand_text,
-        ""
-    ])
-
-    for f in ai_result.get("findings", []):
+    if is_iac:
+        # Tabela executiva inicial
         md.extend([
-            f"### 🔸 {f.get('id')} ({f.get('severity')})",
-            f"{target_label} `{f.get('component')}`",
-            f"{context_label} {f.get('description')}",
+            "",
+            "## 📋 Resumo das Vulnerabilidades Detectadas",
+            "",
+            "| Regra / ID | Local Afetado | Severidade | Ação Recomendada |",
+            "|---|---|---|---|"
+        ])
+        for f in ai_result.get("findings", []):
+            f_id = f.get("id", "N/A")
+            comp = f.get("component", "N/A")
+            sev = f.get("severity", "UNKNOWN")
+            short_act = (f.get("how_to_improve") or f.get("remediation", "")).split(".")[0].replace("\n", " ")
+            md.append(f"| `{f_id}` | `{comp}` | **{sev}** | {short_act} |")
+
+        md.extend([
+            "",
+            "## 🔍 Detalhamento dos Achados, Local Afetado & Como Solucionar",
             ""
         ])
 
-    md.extend([
-        "</details>",
-        "",
-        "---",
-        footer_text
-    ])
+        for f in ai_result.get("findings", []):
+            f_id = f.get("id", "N/A")
+            comp = f.get("component", "N/A")
+            res_name = f.get("resource", "")
+            res_line = f"\n- 🏷️ **Recurso Terraform:** `{res_name}`" if res_name else ""
+            sev = f.get("severity", "UNKNOWN")
+            title = f.get("title") or f_id
+            desc = f.get("description", "Sem descrição disponível.")
+            how_improve = f.get("how_to_improve") or f.get("remediation", "Revisar o recurso de infraestrutura e aplicar os princípios de segurança em nuvem.")
+            aff_code = f.get("affected_code", "")
+            fix_code = f.get("suggested_fix_code", "")
+
+            md.extend([
+                f"### 🔸 [{f_id}] {title} ({sev})",
+                "",
+                f"- 📍 **Local Afetado:** `{comp}`{res_line}",
+                f"- ⚠️ **Diagnóstico & Risco:** {desc}",
+                f"- 💡 **Como Poderia Melhorar:** {how_improve}",
+                ""
+            ])
+
+            if aff_code and aff_code.strip():
+                clean_aff = aff_code.strip()
+                if not clean_aff.startswith("```"):
+                    clean_aff = f"```hcl\n{clean_aff}\n```"
+                md.extend([
+                    "#### ❌ Trecho de Código Afetado Atual:",
+                    clean_aff,
+                    ""
+                ])
+
+            if fix_code and fix_code.strip():
+                clean_fix = fix_code.strip()
+                if not clean_fix.startswith("```"):
+                    clean_fix = f"```hcl\n{clean_fix}\n```"
+                md.extend([
+                    "#### ✅ Sugestão de Código Corrigido (Terraform HCL):",
+                    clean_fix,
+                    ""
+                ])
+
+            md.append("---")
+    else:
+        md.extend([
+            "",
+            sec_details,
+            "",
+            table_headers,
+            "|---|---|---|---|"
+        ])
+
+        for f in ai_result.get("findings", []):
+            f_id = f.get("id", "N/A")
+            comp = f.get("component", "N/A")
+            sev = f.get("severity", "UNKNOWN")
+            remed = f.get("remediation", "").replace("\n", " ")
+            md.append(f"| `{f_id}` | `{comp}` | **{sev}** | {remed} |")
+
+        md.extend([
+            "",
+            "<details>",
+            expand_text,
+            ""
+        ])
+
+        for f in ai_result.get("findings", []):
+            md.extend([
+                f"### 🔸 {f.get('id')} ({f.get('severity')})",
+                f"{target_label} `{f.get('component')}`",
+                f"{context_label} {f.get('description')}",
+                ""
+            ])
+
+        md.extend([
+            "</details>",
+            "",
+            "---"
+        ])
+
+    md.append(footer_text)
 
     with open(args.output_file, "w", encoding="utf-8") as out_f:
         out_f.write("\n".join(md))

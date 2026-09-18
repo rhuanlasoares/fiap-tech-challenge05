@@ -36,7 +36,7 @@ inputs:
   model:
     description: 'Modelo Gemini a ser utilizado'
     required: false
-    default: 'gemini-3.6-flash-lite'
+    default: 'gemini-2.5-flash'
   language:
     description: 'Idioma para os relatórios, resumos e issues geradas (ex: pt-BR, en-US)'
     required: false
