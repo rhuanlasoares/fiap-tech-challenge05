@@ -7,12 +7,14 @@ on:
     paths:
       - 'iac/terraform/**'
       - '.github/workflows/tf-lint.yaml'
+      - '.github/workflows/tf-security.yaml'
   pull_request:
     branches:
       - main
     paths:
       - 'iac/terraform/**'
       - '.github/workflows/tf-lint.yaml'
+      - '.github/workflows/tf-security.yaml'
   workflow_dispatch:
 
 concurrency:
