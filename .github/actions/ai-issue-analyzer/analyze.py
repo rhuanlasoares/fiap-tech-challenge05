@@ -347,31 +347,163 @@ def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-2.5-flash") 
     return None
 
 
-def translate_iac_term_pt(text: str) -> str:
-    """Traduz termos comuns de segurança e remediação de IaC para Português do Brasil."""
+IAC_DICTIONARY = {
+    # DynamoDB
+    "point in time recovery should be enabled to protect dynamodb table": "A recuperação contínua (Point-in-Time Recovery - PITR) deve estar habilitada na tabela DynamoDB",
+    "enable point in time recovery": "Habilitar a recuperação contínua Point-in-Time Recovery (PITR)",
+    "point-in-time recovery is not enabled": "A recuperação contínua Point-in-Time Recovery (PITR) não está habilitada",
+    "dynamodb tables should use at rest encryption with a customer managed key": "Tabelas DynamoDB devem utilizar criptografia em repouso com chave gerenciada pelo cliente (KMS CMK)",
+    "enable server side encryption with a customer managed key": "Habilitar criptografia em repouso com chave KMS gerenciada pelo cliente (CMK)",
+    "table encryption does not use a customer-managed kms key": "A criptografia da tabela não utiliza uma chave KMS gerenciada pelo cliente (CMK)",
+    # Firewall / VPC
+    "limit firewall rules to necessary port ranges only": "Restringir regras de firewall apenas para as faixas de portas estritamente necessárias",
+    "an ingress security group rule allows traffic from /0": "Regra de entrada de firewall permite tráfego público irrestrito (0.0.0.0/0)",
+    "opening up ports to the public internet is generally to be avoided": "A exposição de portas para a internet pública (0.0.0.0/0) deve ser evitada para impedir ataques e explorações diretas",
+    "set a more restrictive cidr range in the firewall rule": "Definir uma faixa CIDR restrita aos IPs corporativos ou utilizar o Cloud IAP / VPN",
+    # Cloud SQL
+    "ensure that cloud sql database instances are not open to the world": "Garantir que instâncias do Cloud SQL não estejam expostas com IP público aberto (0.0.0.0/0)",
+    "ensure that cloud sql instances have ssl/tls enabled": "Exigir conexões criptografadas com SSL/TLS nas instâncias do Cloud SQL",
+    # Storage / Buckets
+    "ensure that cloud storage buckets have uniform bucket-level access enabled": "Garantir que os buckets do Cloud Storage tenham o controle de acesso uniforme ativado (uniform_bucket_level_access = true)",
+    "ensure that storage buckets are encrypted using kms keys": "Garantir que os buckets de armazenamento sejam criptografados com chaves KMS gerenciadas pelo cliente",
+    # GKE
+    "ensure that gke cluster is not running with default service account": "Evitar executar o cluster GKE com a Service Account padrão do Compute Engine",
+    "ensure that gke has stackdriver logging enabled": "Habilitar a coleta de logs do Cloud Operations (Stackdriver Logging) no GKE",
+    "ensure that gke has stackdriver monitoring enabled": "Habilitar as métricas do Cloud Operations (Stackdriver Monitoring) no GKE",
+}
+
+def translate_to_portuguese(text: str) -> str:
+    """Traduz com precisão técnica termos de segurança de infraestrutura para Português do Brasil."""
     if not text:
         return ""
-    t = text
-    subs = [
-        (r'(?i)An ingress security group rule allows traffic from /0', 'Regra de entrada (ingress) de firewall permite tráfego irrestrito de 0.0.0.0/0'),
-        (r'(?i)Opening up ports to the public internet is generally to be avoided', 'A exposição de portas para a internet pública (0.0.0.0/0) deve ser evitada para impedir ataques e explorações diretas'),
-        (r'(?i)Set a more restrictive CIDR range in the firewall rule', 'Defina uma faixa CIDR restrita aos IPs corporativos autorizados ou utilize o Google Cloud IAP (Identity-Aware Proxy)'),
-        (r'(?i)Ensure that Cloud SQL database instances are not open to the world', 'Garanta que instâncias de banco de dados Cloud SQL não estejam abertas para o mundo (0.0.0.0/0)'),
-        (r'(?i)Ensure that Cloud Storage buckets have uniform bucket-level access enabled', 'Garanta que os buckets do Cloud Storage tenham o controle de acesso uniforme ativado (uniform_bucket_level_access = true)'),
-        (r'(?i)Ensure that Private Google Access is enabled for subnetworks', 'Habilite o Acesso Privado do Google (private_ip_google_access = true) na sub-rede'),
-        (r'(?i)Ensure that GKE Cluster is not running with default service account', 'Evite executar o cluster GKE com a Service Account padrão do Compute Engine; use uma conta dedicada com privilégios mínimos'),
-        (r'(?i)Ensure that GKE has Stackdriver Logging enabled', 'Habilite a coleta de logs do Cloud Operations (Stackdriver Logging) no GKE'),
-        (r'(?i)Ensure that GKE has Stackdriver Monitoring enabled', 'Habilite as métricas do Cloud Operations (Stackdriver Monitoring) no GKE'),
-        (r'(?i)Ensure that Cloud SQL instances have SSL/TLS enabled', 'Exija conexões criptografadas via SSL/TLS nas instâncias do Cloud SQL'),
-        (r'(?i)Ensure that security groups do not allow unrestricted ingress', 'Restrinja as regras de entrada de security groups/firewall para faixas restritas'),
-        (r'(?i)to be avoided', 'deve ser evitado'),
-        (r'(?i)ensure that', 'garanta que'),
+    t = text.strip()
+    low = t.lower().rstrip(".")
+    if low in IAC_DICTIONARY:
+        return IAC_DICTIONARY[low]
+    for eng, pt in IAC_DICTIONARY.items():
+        if eng in low:
+            t = re.sub(re.escape(eng), pt, t, flags=re.IGNORECASE)
+
+    replacements = [
+        (r'(?i)point in time recovery should be enabled to protect dynamodb table', 'A recuperação contínua (PITR) deve estar ativada para proteger a tabela DynamoDB'),
+        (r'(?i)dynamodb tables should be protected against accidentally or malicious write/delete actions by ensuring that there is adequate protection', 'As tabelas do DynamoDB devem ser protegidas contra gravações ou deleções acidentais e maliciosas, garantindo recuperação em caso de desastres'),
+        (r'(?i)by enabling point-in-time-recovery you can restore to a known point in the event of loss of data', 'Ao habilitar o Point-in-Time Recovery (PITR), é possível restaurar a tabela para qualquer segundo nos últimos 35 dias em caso de perda ou corrupção de dados'),
+        (r'(?i)using aws managed keys does not allow for fine grained control or rotation', 'O uso de chaves gerenciadas pela AWS não permite auditoria refinada via CloudTrail nem controle sobre a rotação das chaves criptográficas'),
+        (r'(?i)limit firewall rules to necessary port ranges only', 'Restrinja as regras de firewall apenas para as faixas de portas estritamente necessárias'),
+        (r'(?i)firewall rules should not allow unrestricted access to all ports', 'Regras de firewall não devem permitir acesso irrestrito a todas as portas ou intervalos desnecessários'),
+        (r'(?i)is not enabled', 'não está habilitado(a)'),
+        (r'(?i)should be enabled', 'deve estar habilitado(a)'),
+        (r'(?i)should be protected', 'deve ser protegido(a)'),
+        (r'(?i)should use', 'deve utilizar'),
+        (r'(?i)does not use', 'não utiliza'),
+        (r'(?i)to protect', 'para proteger'),
+        (r'(?i)at rest encryption', 'criptografia em repouso'),
+        (r'(?i)customer managed key', 'chave gerenciada pelo cliente (KMS CMK)'),
+        (r'(?i)in the event of loss of data', 'em caso de perda ou corrupção de dados'),
         (r'(?i)must be enabled', 'deve estar habilitado'),
         (r'(?i)should not be exposed', 'não deve ser exposto'),
+        (r'(?i)ensure that', 'garanta que'),
+        (r'(?i)set a more restrictive', 'defina uma faixa mais restritiva de'),
+        (r'(?i)or wide ranges unnecessarily', 'ou faixas excessivamente amplas'),
+        (r'(?i)rule allows port range', 'A regra de firewall permite a faixa de portas'),
+        (r'(?i)point-in-time recovery is not enabled', 'A recuperação contínua (PITR) não está habilitada'),
     ]
-    for pattern, repl in subs:
+    for pattern, repl in replacements:
         t = re.sub(pattern, repl, t)
     return t
+
+
+def generate_suggested_hcl_fix(finding_id: str, title: str, desc: str, resource_name: str, aff_code: str) -> str:
+    """Gera automaticamente o bloco de código Terraform HCL corrigido para o achado."""
+    combined = f"{finding_id} {title} {desc}".lower()
+
+    # 1. DynamoDB PITR
+    if "point in time" in combined or "aws-0024" in combined or "pitr" in combined:
+        return (
+            "# Adicione o bloco point_in_time_recovery no recurso da tabela DynamoDB:\n"
+            "resource \"aws_dynamodb_table\" \"toggle_master_analytics\" {\n"
+            "  name         = \"SolidaryTech\"\n"
+            "  billing_mode = \"PROVISIONED\"\n"
+            "  read_capacity  = 1\n"
+            "  write_capacity = 1\n"
+            "  hash_key       = \"event_id\"\n\n"
+            "  # ✅ Ativação de Recuperação Contínua (PITR):\n"
+            "  point_in_time_recovery {\n"
+            "    enabled = true\n"
+            "  }\n\n"
+            "  attribute {\n"
+            "    name = \"event_id\"\n"
+            "    type = \"S\"\n"
+            "  }\n"
+            "}"
+        )
+
+    # 2. DynamoDB KMS Customer Managed Key
+    if "customer managed" in combined or "aws-0025" in combined or ("dynamodb" in combined and "encryption" in combined):
+        return (
+            "# Adicione o bloco server_side_encryption com a chave KMS gerenciada pelo cliente:\n"
+            "resource \"aws_dynamodb_table\" \"toggle_master_analytics\" {\n"
+            "  name         = \"SolidaryTech\"\n"
+            "  billing_mode = \"PROVISIONED\"\n"
+            "  read_capacity  = 1\n"
+            "  write_capacity = 1\n"
+            "  hash_key       = \"event_id\"\n\n"
+            "  # ✅ Criptografia em Repouso com Chave KMS Própria (CMK):\n"
+            "  server_side_encryption {\n"
+            "    enabled     = true\n"
+            "    kms_key_arn = var.kms_key_arn # ou aws_kms_key.dynamo_key.arn\n"
+            "  }\n"
+            "}"
+        )
+
+    # 3. GCP Firewall Port Ranges
+    if "gcp-0074" in combined or "necessary port ranges" in combined or "port ranges" in combined:
+        return (
+            "# Especifique apenas as portas estritamente necessárias no bloco allow:\n"
+            "resource \"google_compute_firewall\" \"allow_health_check\" {\n"
+            "  name    = \"allow-health-check-gke\"\n"
+            "  network = \"projects/${var.project_id}/global/networks/${var.vpc_name}\"\n\n"
+            "  allow {\n"
+            "    protocol = \"tcp\"\n"
+            "    # ✅ Especifique apenas as portas dos health checks ou serviços (ex: 80, 443, 10256):\n"
+            "    ports    = [\"80\", \"443\", \"10256\"]\n"
+            "  }\n\n"
+            "  source_ranges = [\"130.211.0.0/22\", \"35.191.0.0/16\"]\n"
+            "  direction     = \"INGRESS\"\n"
+            "}"
+        )
+
+    # 4. Ingress 0.0.0.0/0
+    if "0.0.0.0/0" in combined or "ingress" in combined or "avd-gcp-0001" in combined:
+        return (
+            "# Restrinja o source_ranges para a faixa de IPs autorizados ou Cloud IAP:\n"
+            "resource \"google_compute_firewall\" \"allow_restricted\" {\n"
+            "  name    = \"allow-restricted\"\n"
+            "  network = google_compute_network.vpc.name\n\n"
+            "  allow {\n"
+            "    protocol = \"tcp\"\n"
+            "    ports    = [\"22\"]\n"
+            "  }\n\n"
+            "  # ✅ Faixa segura do Identity-Aware Proxy (IAP) do GCP:\n"
+            "  source_ranges = [\"35.235.240.0/20\"]\n"
+            "}"
+        )
+
+    # 5. Cloud Storage Uniform Bucket Access
+    if "uniform_bucket_level_access" in combined or "bucket" in combined:
+        return (
+            "# Ative o controle uniforme no nível de bucket:\n"
+            "resource \"google_storage_bucket\" \"example\" {\n"
+            "  name                        = \"meu-bucket-seguro\"\n"
+            "  location                    = \"SOUTHAMERICA-EAST1\"\n"
+            "  uniform_bucket_level_access = true\n"
+            "}"
+        )
+
+    return (
+        "# Revise os atributos do recurso e adicione os parâmetros de segurança recomendados:\n"
+        "# Certifique-se de configurar criptografia, controle de acesso e auditoria conforme as melhores práticas."
+    )
 
 
 def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, findings: list, language: str = "pt-BR") -> dict:
@@ -385,36 +517,20 @@ def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, f
     processed_findings = []
     for f in findings[:20]:
         item = dict(f)
-        if is_pt and is_iac:
-            item["title"] = translate_iac_term_pt(item.get("title", ""))
-            item["description"] = translate_iac_term_pt(item.get("description", ""))
-            how = translate_iac_term_pt(item.get("how_to_improve", "") or item.get("remediation", ""))
+        if is_pt:
+            item["title"] = translate_to_portuguese(item.get("title", ""))
+            item["description"] = translate_to_portuguese(item.get("description", ""))
+            how = translate_to_portuguese(item.get("how_to_improve", "") or item.get("remediation", ""))
             item["how_to_improve"] = how
             item["remediation"] = how
 
-            # Se for regra de firewall 0.0.0.0/0, sugere exemplo de correção
-            if "0.0.0.0/0" in str(item.get("description", "")) or "ingress" in str(item.get("title", "")).lower():
-                item["suggested_fix_code"] = (
-                    "# Exemplo de correção recomendada em HCL (Terraform):\n"
-                    "resource \"google_compute_firewall\" \"allow_restricted\" {\n"
-                    "  name    = \"allow-ssh-iap\"\n"
-                    "  network = google_compute_network.vpc.name\n"
-                    "  allow {\n"
-                    "    protocol = \"tcp\"\n"
-                    "    ports    = [\"22\"]\n"
-                    "  }\n"
-                    "  # Permitir apenas a faixa segura do Google Cloud IAP:\n"
-                    "  source_ranges = [\"35.235.240.0/20\"]\n"
-                    "}"
-                )
-            elif "uniform_bucket_level_access" in str(item.get("description", "")).lower() or "bucket" in str(item.get("component", "")).lower():
-                item["suggested_fix_code"] = (
-                    "# Exemplo de correção recomendada em HCL (Terraform):\n"
-                    "resource \"google_storage_bucket\" \"example\" {\n"
-                    "  name                        = \"meu-bucket-seguro\"\n"
-                    "  location                    = \"SOUTHAMERICA-EAST1\"\n"
-                    "  uniform_bucket_level_access = true\n"
-                    "}"
+            if is_iac and not item.get("suggested_fix_code"):
+                item["suggested_fix_code"] = generate_suggested_hcl_fix(
+                    item.get("id", ""),
+                    item.get("title", ""),
+                    item.get("description", ""),
+                    item.get("resource", ""),
+                    item.get("affected_code", "")
                 )
         processed_findings.append(item)
 
@@ -529,6 +645,25 @@ Responda ESTRITAMENTE neste formato JSON schema:
         print("[ai-issue-analyzer] ℹ️ Achados ignorados pela IA. Nenhuma issue será criada.")
         set_github_output("create_issue", "false")
         sys.exit(0)
+
+    is_iac = args.scan_type.lower() == "iac"
+
+    # Pós-processamento de garantia: assegurar que todos os campos estão em Português e têm código HCL
+    if is_pt:
+        for f in ai_result.get("findings", []):
+            f["title"] = translate_to_portuguese(f.get("title", ""))
+            f["description"] = translate_to_portuguese(f.get("description", ""))
+            how = translate_to_portuguese(f.get("how_to_improve", "") or f.get("remediation", ""))
+            f["how_to_improve"] = how
+            f["remediation"] = how
+            if is_iac and not f.get("suggested_fix_code"):
+                f["suggested_fix_code"] = generate_suggested_hcl_fix(
+                    f.get("id", ""),
+                    f.get("title", ""),
+                    f.get("description", ""),
+                    f.get("resource", ""),
+                    f.get("affected_code", "")
+                )
 
     # Definição de Cores/Alertas baseada na Severidade
     max_sev = ai_result.get("max_severity", "HIGH").upper()

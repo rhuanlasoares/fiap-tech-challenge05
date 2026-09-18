@@ -72,7 +72,8 @@ runs:
           --service-path "${{ inputs.service-path }}" \
           --output-file "${{ inputs.output-file }}" \
           --model "${{ inputs.model }}" \
-          --language "${{ inputs.language }}"
+          --language "${{ inputs.language }}" \
+          --gemini-api-key "${{ inputs.gemini-api-key }}"
 
     - name: 'Criar ou Atualizar Issue no GitHub'
       if: steps.analyze.outputs.create_issue == 'true'
