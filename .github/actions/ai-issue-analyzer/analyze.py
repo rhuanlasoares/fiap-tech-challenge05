@@ -15,6 +15,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+import urllib.parse
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -347,6 +348,43 @@ def call_gemini_api(api_key: str, prompt: str, model: str = "gemini-2.5-flash") 
     return None
 
 
+_TRANSLATION_CACHE = {}
+
+def auto_translate(text: str, target_lang: str = "pt-BR") -> str:
+    """Traduz dinamicamente qualquer texto em inglês para Português do Brasil com cache e fallback local."""
+    if not text or target_lang.lower() not in ["pt-br", "pt", "portugues", "português"]:
+        return text
+
+    clean_text = text.strip()
+    if not clean_text:
+        return ""
+
+    if clean_text in _TRANSLATION_CACHE:
+        return _TRANSLATION_CACHE[clean_text]
+
+    # Se já for bloco de código ou URL, não traduz
+    if clean_text.startswith("```") or clean_text.startswith("http://") or clean_text.startswith("https://"):
+        return clean_text
+
+    # 1. Tentativa via endpoint de tradução (rápido, sem chaves, nativo)
+    try:
+        url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=pt-BR&dt=t&q=" + urllib.parse.quote(clean_text)
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+            translated_parts = [part[0] for part in res[0] if part and part[0]]
+            if translated_parts:
+                res_pt = "".join(translated_parts).strip()
+                _TRANSLATION_CACHE[clean_text] = res_pt
+                return res_pt
+    except Exception:
+        pass
+
+    # 2. Fallback offline por regras e dicionário
+    res_pt = translate_to_portuguese(clean_text)
+    _TRANSLATION_CACHE[clean_text] = res_pt
+    return res_pt
+
 IAC_DICTIONARY = {
     # DynamoDB
     "point in time recovery should be enabled to protect dynamodb table": "A recuperação contínua (Point-in-Time Recovery - PITR) deve estar habilitada na tabela DynamoDB",
@@ -415,19 +453,19 @@ def translate_to_portuguese(text: str) -> str:
 
 def generate_suggested_hcl_fix(finding_id: str, title: str, desc: str, resource_name: str, aff_code: str) -> str:
     """Gera automaticamente o bloco de código Terraform HCL corrigido para o achado."""
-    combined = f"{finding_id} {title} {desc}".lower()
+    combined = f"{finding_id} {title} {desc} {resource_name}".lower()
 
-    # 1. DynamoDB PITR
-    if "point in time" in combined or "aws-0024" in combined or "pitr" in combined:
+    # 1. DynamoDB PITR (Point-in-Time Recovery)
+    if "aws-0024" in combined or "point in time" in combined or "pitr" in combined or ("dynamodb" in combined and "recovery" in combined):
         return (
-            "# Adicione o bloco point_in_time_recovery no recurso da tabela DynamoDB:\n"
+            "# Ative a recuperação contínua (PITR) no recurso aws_dynamodb_table:\n"
             "resource \"aws_dynamodb_table\" \"toggle_master_analytics\" {\n"
-            "  name         = \"SolidaryTech\"\n"
-            "  billing_mode = \"PROVISIONED\"\n"
+            "  name           = \"SolidaryTech\"\n"
+            "  billing_mode   = \"PROVISIONED\"\n"
             "  read_capacity  = 1\n"
             "  write_capacity = 1\n"
             "  hash_key       = \"event_id\"\n\n"
-            "  # ✅ Ativação de Recuperação Contínua (PITR):\n"
+            "  # ✅ Ativação de Point-in-Time Recovery (PITR):\n"
             "  point_in_time_recovery {\n"
             "    enabled = true\n"
             "  }\n\n"
@@ -439,25 +477,25 @@ def generate_suggested_hcl_fix(finding_id: str, title: str, desc: str, resource_
         )
 
     # 2. DynamoDB KMS Customer Managed Key
-    if "customer managed" in combined or "aws-0025" in combined or ("dynamodb" in combined and "encryption" in combined):
+    if "aws-0025" in combined or "customer managed" in combined or ("dynamodb" in combined and ("encryption" in combined or "kms" in combined)):
         return (
-            "# Adicione o bloco server_side_encryption com a chave KMS gerenciada pelo cliente:\n"
+            "# Configure criptografia em repouso com chave KMS gerenciada pelo cliente:\n"
             "resource \"aws_dynamodb_table\" \"toggle_master_analytics\" {\n"
-            "  name         = \"SolidaryTech\"\n"
-            "  billing_mode = \"PROVISIONED\"\n"
+            "  name           = \"SolidaryTech\"\n"
+            "  billing_mode   = \"PROVISIONED\"\n"
             "  read_capacity  = 1\n"
             "  write_capacity = 1\n"
             "  hash_key       = \"event_id\"\n\n"
             "  # ✅ Criptografia em Repouso com Chave KMS Própria (CMK):\n"
             "  server_side_encryption {\n"
             "    enabled     = true\n"
-            "    kms_key_arn = var.kms_key_arn # ou aws_kms_key.dynamo_key.arn\n"
+            "    kms_key_arn = var.kms_key_arn # Ex: aws_kms_key.dynamo_key.arn\n"
             "  }\n"
             "}"
         )
 
-    # 3. GCP Firewall Port Ranges
-    if "gcp-0074" in combined or "necessary port ranges" in combined or "port ranges" in combined:
+    # 3. GCP Firewall Port Ranges (GCP-0074 / Large port range)
+    if "gcp-0074" in combined or "port range" in combined or "large port" in combined or "necessary port ranges" in combined:
         return (
             "# Especifique apenas as portas estritamente necessárias no bloco allow:\n"
             "resource \"google_compute_firewall\" \"allow_health_check\" {\n"
@@ -465,7 +503,7 @@ def generate_suggested_hcl_fix(finding_id: str, title: str, desc: str, resource_
             "  network = \"projects/${var.project_id}/global/networks/${var.vpc_name}\"\n\n"
             "  allow {\n"
             "    protocol = \"tcp\"\n"
-            "    # ✅ Especifique apenas as portas dos health checks ou serviços (ex: 80, 443, 10256):\n"
+            "    # ✅ Substitua a faixa ampla 30000-32767 pelas portas reais utilizadas (ex: 80, 443, 10256):\n"
             "    ports    = [\"80\", \"443\", \"10256\"]\n"
             "  }\n\n"
             "  source_ranges = [\"130.211.0.0/22\", \"35.191.0.0/16\"]\n"
@@ -500,9 +538,13 @@ def generate_suggested_hcl_fix(finding_id: str, title: str, desc: str, resource_
             "}"
         )
 
+    # 6. Fallback com contexto do recurso
+    res_label = resource_name if resource_name else "recurso"
     return (
-        "# Revise os atributos do recurso e adicione os parâmetros de segurança recomendados:\n"
-        "# Certifique-se de configurar criptografia, controle de acesso e auditoria conforme as melhores práticas."
+        f"# Ajuste os parâmetros de segurança recomendados para {res_label}:\n"
+        "# 1. Restrinja permissões e faixas de rede\n"
+        "# 2. Habilite criptografia em repouso e em trânsito\n"
+        "# 3. Mantenha logs e auditoria ativados no recurso"
     )
 
 
@@ -518,9 +560,9 @@ def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, f
     for f in findings[:20]:
         item = dict(f)
         if is_pt:
-            item["title"] = translate_to_portuguese(item.get("title", ""))
-            item["description"] = translate_to_portuguese(item.get("description", ""))
-            how = translate_to_portuguese(item.get("how_to_improve", "") or item.get("remediation", ""))
+            item["title"] = auto_translate(item.get("title", ""), language)
+            item["description"] = auto_translate(item.get("description", ""), language)
+            how = auto_translate(item.get("how_to_improve", "") or item.get("remediation", ""), language)
             item["how_to_improve"] = how
             item["remediation"] = how
 
@@ -648,12 +690,20 @@ Responda ESTRITAMENTE neste formato JSON schema:
 
     is_iac = args.scan_type.lower() == "iac"
 
-    # Pós-processamento de garantia: assegurar que todos os campos estão em Português e têm código HCL
+    # Pós-processamento de garantia universal: assegurar que 100% dos textos estão traduzidos e com código HCL
     if is_pt:
+        ai_result["title_summary"] = auto_translate(ai_result.get("title_summary", ""), lang)
+        ai_result["executive_summary"] = auto_translate(ai_result.get("executive_summary", ""), lang)
+        
+        new_checklist = []
+        for item in ai_result.get("action_checklist", []):
+            new_checklist.append(auto_translate(item, lang))
+        ai_result["action_checklist"] = new_checklist
+
         for f in ai_result.get("findings", []):
-            f["title"] = translate_to_portuguese(f.get("title", ""))
-            f["description"] = translate_to_portuguese(f.get("description", ""))
-            how = translate_to_portuguese(f.get("how_to_improve", "") or f.get("remediation", ""))
+            f["title"] = auto_translate(f.get("title", ""), lang)
+            f["description"] = auto_translate(f.get("description", ""), lang)
+            how = auto_translate(f.get("how_to_improve", "") or f.get("remediation", ""), lang)
             f["how_to_improve"] = how
             f["remediation"] = how
             if is_iac and not f.get("suggested_fix_code"):
