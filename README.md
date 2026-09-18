@@ -106,7 +106,7 @@ Para suportar essa demanda crítica sem comprometer a viabilidade financeira da 
 ### 1. 🏗️ Fundação DevOps & DevSecOps
 - **Imagens OCI Otimizadas**: Multi-stage builds com imagens base mínimas (`alpine` / `distroless`), usuários não-root (`USER nonroot`) e `.dockerignore` rigoroso.
 - **Infraestrutura como Código**: 100% dos recursos provisionados via Terraform modular (VPC com PSA, GKE Spot Node Pools, Cloud SQL, AWS SQS, Secret Manager, Cloud NAT e IAM).
-- **Pipelines CI/CD com DevSecOps & IA**: GitHub Actions modulares com **SAST (Gosec/Bandit/Trivy Secrets)**, **SCA (Trivy/OWASP)**, **Container Scan**, linting automatizado com auto-fix e **Triagem Inteligente de Issues com Google Gemini (Google AI Studio)** — filtrando falsos positivos, gerando planos de remediação automáticos e auto-resolvendo issues fechadas. Autenticação federada sem chaves via **Workload Identity Federation (WIF / OIDC)**.
+- **Pipelines CI/CD com DevSecOps & IA**: GitHub Actions modulares com **Segurança IaC Terraform (Trivy/TFSec com bloqueio parametrizado)**, **SAST (Gosec/Bandit/Trivy Secrets)**, **SCA (Trivy/OWASP)**, **Container Scan**, linting automatizado com auto-fix e **Triagem Inteligente de Issues com Google Gemini (Google AI Studio)** — filtrando falsos positivos, gerando planos de remediação automáticos e auto-resolvendo issues fechadas. Autenticação federada sem chaves via **Workload Identity Federation (WIF / OIDC)**.
 - **GitOps com Argo CD & Rollouts**: Deploy contínuo automatizado com **Canary Releases** progressivos e análise automática de métricas para auto-rollback em caso de falha.
 
 ---

@@ -10,6 +10,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -233,6 +234,67 @@ def parse_findings(scan_type: str, tool_name: str, report_file: str, diff_file: 
                     "remediation": alert.get("solution", "Verificar documentação de segurança para o endpoint.")
                 })
 
+
+    # 6. IaC (Terraform, CloudFormation, etc. — Trivy IaC, TFSec, Checkov)
+    elif scan_type.lower() == "iac":
+        # A. Trivy Misconfigurations (trivy config / trivy fs para IaC)
+        if "Results" in data:
+            for res in data.get("Results", []):
+                target = res.get("Target", "terraform")
+                for conf in res.get("Misconfigurations", []) or []:
+                    cause = conf.get("CauseMetadata", {})
+                    start_line = cause.get("StartLine", "")
+                    loc = f"{target}:{start_line}" if start_line else target
+                    code_lines = cause.get("Code", {}).get("Lines", [])
+                    code_snippet = ""
+                    if code_lines:
+                        code_snippet = "\n".join([f"{l.get('Number')}: {l.get('Content', '').rstrip()}" for l in code_lines if l.get("Content")])
+
+                    desc = conf.get("Description", "Sem descrição.")
+                    msg = conf.get("Message", "")
+                    full_desc = f"{msg}\n{desc}" if msg and msg != desc else desc
+                    if code_snippet:
+                        full_desc += f"\n\nCódigo afetado:\n```hcl\n{code_snippet}\n```"
+
+                    findings.append({
+                        "id": conf.get("ID", "IAC-MISCONFIG"),
+                        "component": loc,
+                        "severity": conf.get("Severity", "LOW").upper(),
+                        "title": conf.get("Title", "Configuração Insegura de Infraestrutura"),
+                        "description": full_desc.strip(),
+                        "remediation": conf.get("Resolution", "Ajustar configuração nos arquivos HCL do Terraform.")
+                    })
+        # B. Formato nativo TFSec (JSON com chave 'results')
+        elif "results" in data and isinstance(data.get("results"), list):
+            for r in data.get("results", []):
+                loc_data = r.get("location", {})
+                fn = loc_data.get("filename", "terraform")
+                ln = loc_data.get("start_line", "")
+                comp = f"{fn}:{ln}" if ln else fn
+                findings.append({
+                    "id": r.get("rule_id") or r.get("long_id", "TFSEC-RULE"),
+                    "component": comp,
+                    "severity": r.get("severity", "LOW").upper(),
+                    "title": r.get("rule_description") or r.get("description", "Vulnerabilidade IaC"),
+                    "description": f"{r.get('explanation', '')} {r.get('description', '')}".strip(),
+                    "remediation": r.get("resolution", "Ajustar os parâmetros inseguros do recurso Terraform.")
+                })
+        # C. Formato Checkov (JSON com chave 'results.failed_checks')
+        elif "results" in data and isinstance(data.get("results"), dict):
+            failed = data.get("results", {}).get("failed_checks", []) or []
+            for fc in failed:
+                fp = fc.get("file_path", "terraform")
+                lines = fc.get("file_line_range", [])
+                comp = f"{fp}:{lines[0]}" if lines else fp
+                findings.append({
+                    "id": fc.get("check_id", "CKV-RULE"),
+                    "component": comp,
+                    "severity": (fc.get("severity") or "HIGH").upper(),
+                    "title": fc.get("check_name", "Violação de Política IaC"),
+                    "description": f"{fc.get('check_name', '')} no arquivo {fp}.",
+                    "remediation": fc.get("guideline") or "Revisar diretrizes do Checkov e corrigir a configuração."
+                })
+
     return findings
 
 
@@ -290,7 +352,7 @@ def generate_fallback_issue(scan_type: str, tool_name: str, service_name: str, f
 
 def main():
     parser = argparse.ArgumentParser(description="AI Issue Analyzer with Gemini")
-    parser.add_argument("--scan-type", required=True, choices=["lint", "sca", "sast", "container", "dast"])
+    parser.add_argument("--scan-type", required=True, choices=["lint", "sca", "sast", "container", "dast", "iac"])
     parser.add_argument("--tool-name", required=True)
     parser.add_argument("--report-file", default="")
     parser.add_argument("--diff-file", default="")
@@ -329,6 +391,7 @@ DIRETRIZES DE RESPOSTA E IDIOMA:
 3. Defina a severidade máxima consolidada ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO').
 4. 'executive_summary': Crie um resumo executivo direto e técnico em {lang_name} (1 parágrafo claro explicando o impacto real).
 5. 'action_checklist': Forneça um array com ações diretas e imperativas em {lang_name} (ex: "Configurar cabeçalho X-Content-Type-Options: nosniff", "Definir Content-Security-Policy", "Atualizar dependência vulnerável").
+6. DIRETRIZ IAC / TERRAFORM: Se o scan-type for 'IAC', explique os riscos de arquitetura em nuvem (exposição pública, dados sem criptografia, falha de IAM/least privilege) e no campo 'remediation' detalhe como solucionar fornecendo exemplos práticos em HCL (Terraform).
 
 Responda ESTRITAMENTE neste formato JSON schema:
 {{
@@ -358,7 +421,12 @@ Responda ESTRITAMENTE neste formato JSON schema:
     
     default_title = "Vulnerabilidades Identificadas" if is_pt else "Identified Vulnerabilities"
     title_summary = ai_result.get("title_summary", default_title)
-    labels = ["security", args.scan_type.lower(), args.tool_name.lower().replace(" ", "-"), max_sev.lower()]
+    is_iac = args.scan_type.lower() == "iac"
+    clean_tool_label = re.sub(r'[^a-zA-Z0-9_-]', '', args.tool_name.lower().replace(" ", "-"))
+    labels = ["security", args.scan_type.lower(), clean_tool_label, max_sev.lower()]
+    if is_iac and "terraform" not in labels:
+        labels.append("terraform")
+    labels = [l for l in dict.fromkeys(labels) if l]
     
     # Metadata do GitHub
     run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY', 'repo')}/actions/runs/{os.getenv('GITHUB_RUN_ID', 'local')}"
@@ -367,7 +435,8 @@ Responda ESTRITAMENTE neste formato JSON schema:
     # Geração do Markdown (Localizado para o idioma definido)
     if is_pt:
         header_title = f"# 🛡️ Triagem de Segurança: {args.tool_name}"
-        meta_service = f"> **Microsserviço:** `{args.service_name}` | **Severidade Máxima:** `{max_sev}`"
+        target_label_txt = "Componente IaC" if is_iac else "Microsserviço"
+        meta_service = f"> **{target_label_txt}:** `{args.service_name}` | **Severidade Máxima:** `{max_sev}`"
         meta_origin = f"> **Origem:** [Execução da Pipeline]({run_url}) | **Commit:** `{commit_sha[:7]}`"
         sec_summary = "## 📝 Resumo Executivo"
         sec_checklist = "## 🛠️ Plano de Ação (Checklist)"

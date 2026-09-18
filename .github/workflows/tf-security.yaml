@@ -1,0 +1,105 @@
+name: 🛡️ Terraform Security Scan (IaC)
+
+on:
+  workflow_run:
+    workflows: ["Terraform Lint & Validate"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      block_on_critical:
+        description: "Bloquear a pipeline se houver vulnerabilidades HIGH ou CRITICAL?"
+        type: boolean
+        required: true
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+env:
+  DEFAULT_BLOCK_ON_CRITICAL: "true"
+  BLOCK_ON_CRITICAL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.block_on_critical || vars.TF_BLOCK_ON_CRITICAL || 'true' }}
+
+jobs:
+  tf-security:
+    name: Terraform Security (Trivy & TFSec)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Executar Trivy IaC Scan (JSON para IA)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: iac/terraform
+          format: json
+          output: iac/terraform/trivy-iac-results.json
+          severity: LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Exibir Relatório Resumido no Log
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: iac/terraform
+          format: table
+          severity: LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Triagem com IA e Criação de Issue (Google Gemini)
+        id: ai_issue
+        if: always()
+        uses: ./.github/actions/ai-issue-analyzer
+        with:
+          scan-type: iac
+          tool-name: "Trivy IaC (TFSec)"
+          report-file: "iac/terraform/trivy-iac-results.json"
+          service-name: "iac-terraform"
+          service-path: "iac/terraform"
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file: "iac/terraform/issue-tf-security.md"
+
+      - name: Avaliar Severidade e Bloqueio Parametrizado
+        id: check-blocking
+        if: always()
+        shell: bash
+        run: |
+          echo "=========================================================="
+          echo "       Governança de Segurança Terraform (IaC)            "
+          echo "=========================================================="
+          echo " Severidade Máxima : ${{ steps.ai_issue.outputs.max-severity || 'NENHUMA' }}"
+          echo " Issue Criada/Mod. : ${{ steps.ai_issue.outputs.create-issue || 'false' }}"
+          echo " Bloqueio Ativo    : ${{ env.BLOCK_ON_CRITICAL }}"
+          echo "=========================================================="
+
+          MAX_SEV="${{ steps.ai_issue.outputs.max-severity }}"
+          CREATE_ISSUE="${{ steps.ai_issue.outputs.create-issue }}"
+
+          if [ "$CREATE_ISSUE" = "true" ] && { [ "$MAX_SEV" = "CRITICAL" ] || [ "$MAX_SEV" = "HIGH" ]; }; then
+            if [ "${{ env.BLOCK_ON_CRITICAL }}" = "true" ]; then
+              echo "❌ BLOQUEIO: Achados de severidade $MAX_SEV detectados no código Terraform."
+              echo "   A pipeline foi interrompida para evitar a criação de infraestrutura vulnerável."
+              echo "   Consulte a Issue aberta no GitHub para analisar o plano de remediação e o código sugerido."
+              exit 1
+            else
+              echo "⚠️ AVISO: Achados de severidade $MAX_SEV detectados, porém o bloqueio está DESATIVADO."
+              echo "   Consulte a Issue gerada pela IA para planejar a correção dos recursos."
+            fi
+          else
+            echo "✅ Análise de segurança concluída sem violações impeditivas."
+          fi

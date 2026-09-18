@@ -19,6 +19,7 @@ grafana:
   
   additionalDataSources:
     - name: Loki
+      uid: loki
       type: loki
       url: http://loki-gateway.monitoring-ns.svc.cluster.local:80
       access: proxy

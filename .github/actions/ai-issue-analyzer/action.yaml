@@ -2,7 +2,7 @@ name: 'AI Issue Analyzer with Gemini'
 description: 'Analisa relatórios de segurança e lint com Google AI Studio (Gemini) e cria issues acionáveis somente quando necessário.'
 inputs:
   scan-type:
-    description: 'Tipo de scan: lint, sca, sast, container, dast'
+    description: 'Tipo de scan: lint, sca, sast, container, dast, iac'
     required: true
   tool-name:
     description: 'Nome da ferramenta (ex: Trivy, Gosec, Lint Go, OWASP ZAP)'
@@ -49,6 +49,9 @@ outputs:
   issue-file:
     description: 'Caminho do arquivo Markdown gerado'
     value: ${{ steps.analyze.outputs.issue_file }}
+  max-severity:
+    description: 'Severidade máxima consolidada (CRITICAL, HIGH, MEDIUM, LOW, INFO)'
+    value: ${{ steps.analyze.outputs.max_severity }}
 
 runs:
   using: 'composite'

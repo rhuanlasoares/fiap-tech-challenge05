@@ -19,7 +19,8 @@ Esta documentação detalha a arquitetura completa dos fluxos de trabalho (**Wor
 │  │    ├── reusable-lint.yaml                                                                          │  │
 │  │    │   ├── Go: gofmt + golangci-lint (--fix) ➔ auto-commit e push para main                        │  │
 │  │    │   └── Python: black + isort + flake8 + pylint ➔ auto-commit e push para main                  │  │
-│  │    └── tf-lint.yaml ➔ Validação de infraestrutura Terraform (fmt, validate, tflint)               │  │
+│  │    ├── tf-lint.yaml ➔ Validação de infraestrutura Terraform (fmt, validate)                       │
+│    └── tf-security.yaml ➔ Segurança IaC (Trivy + TFSec + IA Gemini com Bloqueio Parametrizado)     │  │
 │  └──────────────────────────────────────────────┬─────────────────────────────────────────────────────┘  │
 │                                                 │                                                        │
 │                                                 ▼                                                        │
@@ -68,7 +69,7 @@ Para solucionar problemas comuns de governança em pipelines DevSecOps — como 
 
 📁 **Caminho:** [`.github/actions/ai-issue-analyzer`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer)
 - [`action.yaml`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer/action.yaml): Declaração de inputs, saídas e orquestração.
-- [`analyze.py`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer/analyze.py): Script de alta performance em Python nativo (`urllib.request`), sem necessidade de `pip install` e com execução instantânea (0s overhead). Suporta `lint`, `sca`, `sast`, `container` e `dast` (OWASP ZAP).
+- [`analyze.py`](file://wsl.localhost/Ubuntu-24.04/home/rhuanlas/fiap-tech-challenge-05/.github/actions/ai-issue-analyzer/analyze.py): Script de alta performance em Python nativo (`urllib.request`), sem necessidade de `pip install` e com execução instantânea (0s overhead). Suporta `lint`, `sca`, `sast`, `container`, `dast` (OWASP ZAP) e `iac` (Terraform Trivy/TFSec).
 
 ### ⚙️ Características Arquiteturais
 
@@ -214,6 +215,19 @@ go get google.golang.org/grpc@v1.83.2
 go mod tidy
 ```
 ````
+
+---
+
+
+### 2.5. Segurança de Infraestrutura como Código: `tf-security.yaml`
+📁 **Arquivo:** [`.github/workflows/tf-security.yaml`](file:///.github/workflows/tf-security.yaml)
+- **Gatilho Encadeado (`workflow_run`)**: Acionado automaticamente quando o workflow `Terraform Lint & Validate` (`tf-lint.yaml`) termina com status `success`.
+- **Gatilho Manual (`workflow_dispatch`)**: Permite disparo sob demanda na interface do GitHub Actions.
+- **Scanner IaC**: Utiliza **Trivy IaC** (incorporando o catálogo de regras do **TFSec** e benchmarks CIS) para detectar recursos expostos, senhas vazadas e permissões excessivas no Terraform.
+- **Triagem Inteligente com IA**: Dispara o `ai-issue-analyzer` com `scan-type: iac`, gerando Issues com sugestões de código HCL prontas para correção e checklist de mitigação.
+- **Bloqueio Parametrizado (`block_on_critical`)**:
+  - Parâmetro selecionável na UI (`true`/`false`) ou configurável via variável de repositório `vars.TF_BLOCK_ON_CRITICAL`.
+  - Permite escolher entre auditoria permissiva (apenas avisos e criação de issues) ou restritiva (falha com código 1 em vulnerabilidades `HIGH`/`CRITICAL`).
 
 ---
 

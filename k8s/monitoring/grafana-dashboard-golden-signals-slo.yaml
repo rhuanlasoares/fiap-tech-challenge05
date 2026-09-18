@@ -1,0 +1,1574 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-golden-signals-slo
+  namespace: monitoring-ns
+  labels:
+    grafana_dashboard: "1"
+    release: monitoring
+    app: kube-prometheus-stack
+  annotations:
+    k8s-sidecar-target-directory: "/tmp/dashboards/SRE & Platform Observability"
+    description: "Dashboard declarativo de Golden Signals, SLOs e Error Budget para o Grafana"
+data:
+  golden-signals-slo.json: |-
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 2,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "id": 1,
+          "type": "row",
+          "title": "\ud83c\udf1f Vis\u00e3o Executiva SRE & Sa\u00fade da Plataforma SolidaryTech",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 2,
+          "type": "gauge",
+          "title": "Disponibilidade Global da Plataforma (SLI Atual)",
+          "description": "Percentual de requisi\u00e7\u00f5es processadas com sucesso (sem status HTTP 5xx) na janela selecionada comparado ao alvo do SLO.",
+          "gridPos": {
+            "x": 0,
+            "y": 1,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "clamp_max((sum(rate(http_requests_total{status!~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) / sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$window]))) * 100, 100)",
+              "legendFormat": "SLI Global",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 98.0,
+              "max": 100.0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#F2495C",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 99.0
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 99.5
+                  },
+                  {
+                    "color": "#73BF69",
+                    "value": 99.9
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "showThresholdMarkers": true,
+            "showThresholdLabels": true
+          }
+        },
+        {
+          "id": 3,
+          "type": "gauge",
+          "title": "Error Budget Restante (%)",
+          "description": "Or\u00e7amento de erro remanescente na janela selecionada. Abaixo de 0% indica viola\u00e7\u00e3o do SLO contratual.",
+          "gridPos": {
+            "x": 4,
+            "y": 1,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "clamp_min(100 - (((100 - (sum(rate(http_requests_total{status!~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) / sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$window]))) * 100)) / (100 - $slo_availability) * 100), 0)",
+              "legendFormat": "Error Budget Restante",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#F2495C",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 10
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 30
+                  },
+                  {
+                    "color": "#73BF69",
+                    "value": 60
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "showThresholdMarkers": true,
+            "showThresholdLabels": true
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Error Budget Consumido",
+          "description": "Fra\u00e7\u00e3o do or\u00e7amento de erro j\u00e1 gasta por incidentes e falhas HTTP 5xx.",
+          "gridPos": {
+            "x": 8,
+            "y": 1,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "clamp_max((((100 - (sum(rate(http_requests_total{status!~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) / sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$window]))) * 100)) / (100 - $slo_availability) * 100), 100)",
+              "legendFormat": "Consumo Or\u00e7amento",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 50
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 80
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 100
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "auto"
+          }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Burn Rate Atual (1h)",
+          "description": "Velocidade de queima do Error Budget. 1.0 = queima em 30 dias (sustent\u00e1vel). > 6.0 = aten\u00e7\u00e3o (queima em 5d). > 14.4 = CR\u00cdTICO (esgota em 2d - acionar On-Call).",
+          "gridPos": {
+            "x": 12,
+            "y": 1,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "((sum(rate(http_requests_total{status=~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[1h])) or vector(0)) / (sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[1h])) > 0)) / (1 - ($slo_availability / 100))",
+              "legendFormat": "Burn Rate (1h)",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 1.0
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 6.0
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 14.4
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Tr\u00e1fego Total Ativo",
+          "description": "Throughput instant\u00e2neo agregado da plataforma (Requisi\u00e7\u00f5es por segundo).",
+          "gridPos": {
+            "x": 16,
+            "y": 1,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[1m]))",
+              "legendFormat": "Taxa Total",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "color": {
+                "mode": "palette-classic"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#5794F2",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "area"
+          }
+        },
+        {
+          "id": 7,
+          "type": "stat",
+          "title": "Lat\u00eancia P95 Global",
+          "description": "Percentil 95 do tempo de resposta de todos os microsservi\u00e7os nos \u00faltimos 5 minutos.",
+          "gridPos": {
+            "x": 20,
+            "y": 1,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) by (le))",
+              "legendFormat": "P95 Global",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 250
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 500
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 1000
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "area"
+          }
+        },
+        {
+          "id": 8,
+          "type": "row",
+          "title": "\ud83c\udfaf Gest\u00e3o Formal de SLOs & Motor de Consumo de Error Budget (SRE)",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 7,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 9,
+          "type": "gauge",
+          "title": "SLI de Disponibilidade por Microsservi\u00e7o (Meta: ${slo_availability}%)",
+          "description": "Conformidade individual de cada microsservi\u00e7o com o SLO de disponibilidade.",
+          "gridPos": {
+            "x": 0,
+            "y": 8,
+            "w": 8,
+            "h": 7
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "clamp_max((sum(rate(http_requests_total{status!~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) by (service_name) / sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) by (service_name)) * 100, 100)",
+              "legendFormat": "{{service_name}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 98.0,
+              "max": 100.0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#F2495C",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 99.0
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 99.5
+                  },
+                  {
+                    "color": "#73BF69",
+                    "value": 99.9
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "showThresholdMarkers": true,
+            "showThresholdLabels": false
+          }
+        },
+        {
+          "id": 10,
+          "type": "gauge",
+          "title": "SLI de Lat\u00eancia (Requisi\u00e7\u00f5es < ${slo_latency_target_ms}ms)",
+          "description": "Percentual de requisi\u00e7\u00f5es atendidas com tempo de resposta estritamente inferior ao limiar contratual do SLO de lat\u00eancia.",
+          "gridPos": {
+            "x": 8,
+            "y": 8,
+            "w": 8,
+            "h": 7
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "clamp_max((sum(rate(http_server_duration_milliseconds_bucket{le=~\"$slo_latency_target_ms\", service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) by (service_name) / sum(rate(http_server_duration_milliseconds_count{service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) by (service_name)) * 100, 100)",
+              "legendFormat": "{{service_name}} (< ${slo_latency_target_ms}ms)",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 85.0,
+              "max": 100.0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#F2495C",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 90.0
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 95.0
+                  },
+                  {
+                    "color": "#73BF69",
+                    "value": 99.0
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "showThresholdMarkers": true,
+            "showThresholdLabels": false
+          }
+        },
+        {
+          "id": 11,
+          "type": "bargauge",
+          "title": "Multi-Window Multi-Burn-Rate (Velocidade de Queima)",
+          "description": "Taxa de queima do or\u00e7amento em m\u00faltiplas janelas de tempo (1h, 6h, 24h, 3d). Refer\u00eancia Google SRE: 1.0 = sustent\u00e1vel em 30d; 6.0 = 100% em 5d (Warning); 14.4 = 100% em 2d (Critical).",
+          "gridPos": {
+            "x": 16,
+            "y": 8,
+            "w": 8,
+            "h": 7
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "((sum(rate(http_requests_total{status=~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[1h])) or vector(0)) / (sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[1h])) > 0)) / (1 - ($slo_availability / 100))",
+              "legendFormat": "Burn Rate (Janela 1h) - Threshold Cr\u00edtico: 14.4x",
+              "range": true
+            },
+            {
+              "refId": "B",
+              "expr": "((sum(rate(http_requests_total{status=~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[6h])) or vector(0)) / (sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[6h])) > 0)) / (1 - ($slo_availability / 100))",
+              "legendFormat": "Burn Rate (Janela 6h) - Threshold Alerta: 6.0x",
+              "range": true
+            },
+            {
+              "refId": "C",
+              "expr": "((sum(rate(http_requests_total{status=~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[24h])) or vector(0)) / (sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[24h])) > 0)) / (1 - ($slo_availability / 100))",
+              "legendFormat": "Burn Rate (Janela 24h) - Threshold Aten\u00e7\u00e3o: 3.0x",
+              "range": true
+            },
+            {
+              "refId": "D",
+              "expr": "((sum(rate(http_requests_total{status=~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[3d])) or vector(0)) / (sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[3d])) > 0)) / (1 - ($slo_availability / 100))",
+              "legendFormat": "Burn Rate (Janela 3d) - Threshold Normal: 1.0x",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "min": 0,
+              "max": 20,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 1.0
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 6.0
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 14.4
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true,
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 12,
+          "type": "timeseries",
+          "title": "\ud83d\udcc9 Curva de Burn-Down do Error Budget Restante ao Longo do Tempo",
+          "description": "Evolu\u00e7\u00e3o temporal do saldo do or\u00e7amento de erro. Quando atinge zero, a equipe SRE deve bloquear novos deploys em favor de estabiliza\u00e7\u00e3o.",
+          "gridPos": {
+            "x": 0,
+            "y": 15,
+            "w": 16,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "clamp_min(100 - (((100 - (sum(rate(http_requests_total{status!~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) by (service_name) / sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$window])) by (service_name)) * 100)) / (100 - $slo_availability) * 100), 0)",
+              "legendFormat": "{{service_name}} - Or\u00e7amento Restante",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 15,
+                "gradientMode": "opacity",
+                "thresholdsStyle": {
+                  "mode": "dashed"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#F2495C",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 15
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 40
+                  },
+                  {
+                    "color": "#73BF69",
+                    "value": 75
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "min",
+                "mean"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "Tend\u00eancia Temporal dos SLIs (Disponibilidade & Lat\u00eancia Instant\u00e2nea)",
+          "description": "Comparativo cont\u00ednuo entre o SLI de disponibilidade e o percentual de atendimento do SLO de lat\u00eancia.",
+          "gridPos": {
+            "x": 16,
+            "y": 15,
+            "w": 8,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(rate(http_requests_total{status!~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) / sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[5m]))) * 100",
+              "legendFormat": "Disponibilidade (5m)",
+              "range": true
+            },
+            {
+              "refId": "B",
+              "expr": "(sum(rate(http_server_duration_milliseconds_bucket{le=~\"$slo_latency_target_ms\", service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) / sum(rate(http_server_duration_milliseconds_count{service_name=~\"$service\", namespace=~\"$namespace\"}[5m]))) * 100",
+              "legendFormat": "Lat\u00eancia < ${slo_latency_target_ms}ms (5m)",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 90,
+              "max": 100,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "min"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "id": 14,
+          "type": "row",
+          "title": "\u23f1\ufe0f Golden Signal 1: Lat\u00eancia (Latency) \u2014 Dura\u00e7\u00e3o das Requisi\u00e7\u00f5es",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 23,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 15,
+          "type": "timeseries",
+          "title": "Curvas de Lat\u00eancia por Percentil (P50, P90, P95, P99) com Limiares de Alerta",
+          "description": "Tempo de resposta das requisi\u00e7\u00f5es HTTP em milissegundos. Linhas pontilhadas indicam os limites de warning (500ms) e critical (1500ms) definidos nas regras do Prometheus.",
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 16,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_duration_milliseconds_bucket{service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) by (le, service_name))",
+              "legendFormat": "{{service_name}} - P99",
+              "range": true
+            },
+            {
+              "refId": "B",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) by (le, service_name))",
+              "legendFormat": "{{service_name}} - P95",
+              "range": true
+            },
+            {
+              "refId": "C",
+              "expr": "histogram_quantile(0.50, sum(rate(http_server_duration_milliseconds_bucket{service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) by (le, service_name))",
+              "legendFormat": "{{service_name}} - P50 (Mediana)",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 500
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 1500
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max",
+                "mean"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 16,
+          "type": "timeseries",
+          "title": "Dura\u00e7\u00e3o M\u00e9dia de Processamento por Microsservi\u00e7o",
+          "description": "M\u00e9dia ponderada do tempo de resposta (sum/count) em milissegundos.",
+          "gridPos": {
+            "x": 16,
+            "y": 24,
+            "w": 8,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_server_duration_milliseconds_sum{service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) by (service_name) / sum(rate(http_server_duration_milliseconds_count{service_name=~\"$service\", namespace=~\"$namespace\"}[5m])) by (service_name)",
+              "legendFormat": "{{service_name}} (M\u00e9dia)",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 1,
+                "fillOpacity": 40
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "id": 17,
+          "type": "row",
+          "title": "\ud83d\udea6 Golden Signal 2: Tr\u00e1fego (Traffic) \u2014 Demanda & Requisi\u00e7\u00f5es por Segundo",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 32,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 18,
+          "type": "timeseries",
+          "title": "Throughput por Servi\u00e7o (Req/s)",
+          "description": "Taxa de chegada de requisi\u00e7\u00f5es por microsservi\u00e7o.",
+          "gridPos": {
+            "x": 0,
+            "y": 33,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$__rate_interval])) by (service_name)",
+              "legendFormat": "{{service_name}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "gradientMode": "opacity",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max",
+                "mean"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 19,
+          "type": "timeseries",
+          "title": "Detec\u00e7\u00e3o de Anomalias de Tr\u00e1fego (Tr\u00e1fego Atual vs M\u00e9dia 1h)",
+          "description": "Raz\u00e3o entre o tr\u00e1fego atual e a m\u00e9dia m\u00f3vel de 1 hora. Valores > 2.0 disparam alerta de Spike; Valores == 0 com hist\u00f3rico ativo disparam alerta de queda cr\u00edtica.",
+          "gridPos": {
+            "x": 12,
+            "y": 33,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[2m])) by (service_name) / avg_over_time(sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[1h])) by (service_name)[1h:])",
+              "legendFormat": "{{service_name}} - Raz\u00e3o vs Linha de Base",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 2.0
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "id": 20,
+          "type": "row",
+          "title": "\ud83d\udea8 Golden Signal 3: Erros (Errors) \u2014 Falhas HTTP 5xx, 4xx & Viola\u00e7\u00e3o de Limiares",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 41,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 21,
+          "type": "timeseries",
+          "title": "Taxa de Erro HTTP 5xx (% do Tr\u00e1fego) vs Limiar Cr\u00edtico (5%)",
+          "description": "Percentual de erros de servidor 5xx. Ultrapassar 5% por 1m aciona o alerta HighHttpErrorRate5xx no Alertmanager e reprova o Canary no Argo Rollouts.",
+          "gridPos": {
+            "x": 0,
+            "y": 42,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(rate(http_requests_total{status=~\"5..\", service_name=~\"$service\", namespace=~\"$namespace\"}[$__rate_interval])) by (service_name) / sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$__rate_interval])) by (service_name)) * 100",
+              "legendFormat": "{{service_name}} - Taxa 5xx (%)",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 1.0
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 5.0
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Decomposi\u00e7\u00e3o do Tr\u00e1fego por C\u00f3digo de Resposta HTTP",
+          "description": "Taxa de respostas categorizadas por classe de status HTTP.",
+          "gridPos": {
+            "x": 12,
+            "y": 42,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_requests_total{service_name=~\"$service\", namespace=~\"$namespace\"}[$__rate_interval])) by (status)",
+              "legendFormat": "Status {{status}}",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "bars",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "lineWidth": 1,
+                "fillOpacity": 60
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*2..*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#73BF69",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*3..*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#5794F2",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*4..*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#FADE2A",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*5..*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "#F2495C",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "sum"
+              ]
+            }
+          }
+        },
+        {
+          "id": 23,
+          "type": "row",
+          "title": "\ud83c\udf9b\ufe0f Golden Signal 4: Satura\u00e7\u00e3o (Saturation) \u2014 CPU, Mem\u00f3ria & Risco de OOM",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 50,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 24,
+          "type": "timeseries",
+          "title": "Satura\u00e7\u00e3o de Mem\u00f3ria Working Set (% do Limit declarado)",
+          "description": "Percentual de consumo do limite de mem\u00f3ria por pod. > 85% dispara alerta ContainerMemorySaturation devido ao risco iminente de OOMKilled.",
+          "gridPos": {
+            "x": 0,
+            "y": 51,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(container_memory_working_set_bytes{container=~\"$service\", namespace=~\"$namespace\"} / kube_pod_container_resource_limits{resource=\"memory\", container=~\"$service\", namespace=~\"$namespace\"}) * 100",
+              "legendFormat": "{{pod}} ({{container}})",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 75
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 85
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "id": 25,
+          "type": "timeseries",
+          "title": "Satura\u00e7\u00e3o de CPU (% da Quota de Limite declarada)",
+          "description": "Percentual de uso da quota de CPU por pod. > 85% causa throttling e degrada\u00e7\u00e3o de lat\u00eancia.",
+          "gridPos": {
+            "x": 12,
+            "y": 51,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(rate(container_cpu_usage_seconds_total{container=~\"$service\", namespace=~\"$namespace\"}[3m])) by (pod, container) / sum(kube_pod_container_resource_limits{resource=\"cpu\", container=~\"$service\", namespace=~\"$namespace\"}) by (pod, container)) * 100",
+              "legendFormat": "{{pod}} ({{container}})",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FF9830",
+                    "value": 70
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 85
+                  }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "id": 26,
+          "type": "row",
+          "title": "\ud83d\ude80 Progressive Delivery \u2014 Desempenho de SLOs do Canary (Argo Rollouts)",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 59,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 27,
+          "type": "timeseries",
+          "title": "Taxa de Sucesso: Pods Canary vs Pods Stable (Rollout Gatekeeper)",
+          "description": "Comparativo direto entre os pods da nova vers\u00e3o (Canary) e da vers\u00e3o est\u00e1vel. Usado pela AnalysisRun para decis\u00e3o autom\u00e1tica de promo\u00e7\u00e3o ou rollback.",
+          "gridPos": {
+            "x": 0,
+            "y": 60,
+            "w": 12,
+            "h": 7
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(rate(http_requests_total{service_name=~\"$service\", status!~\"5..\", pod=~\"(?i).*canary.*\"}[2m])) / sum(rate(http_requests_total{service_name=~\"$service\", pod=~\"(?i).*canary.*\"}[2m]))) * 100",
+              "legendFormat": "Canary Version (Success %)",
+              "range": true
+            },
+            {
+              "refId": "B",
+              "expr": "(sum(rate(http_requests_total{service_name=~\"$service\", status!~\"5..\", pod!~\"(?i).*canary.*\"}[2m])) / sum(rate(http_requests_total{service_name=~\"$service\", pod!~\"(?i).*canary.*\"}[2m]))) * 100",
+              "legendFormat": "Stable Baseline (Success %)",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 80,
+              "max": 100,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "min"
+              ]
+            }
+          }
+        },
+        {
+          "id": 28,
+          "type": "timeseries",
+          "title": "Lat\u00eancia P95: Pods Canary vs Pods Stable",
+          "description": "Tempo P95 comparativo para detec\u00e7\u00e3o precoce de regress\u00f5es de performance antes da libera\u00e7\u00e3o de 100% do tr\u00e1fego.",
+          "gridPos": {
+            "x": 12,
+            "y": 60,
+            "w": 12,
+            "h": 7
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{service_name=~\"$service\", pod=~\"(?i).*canary.*\"}[2m])) by (le))",
+              "legendFormat": "Canary P95 Latency",
+              "range": true
+            },
+            {
+              "refId": "B",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{service_name=~\"$service\", pod!~\"(?i).*canary.*\"}[2m])) by (le))",
+              "legendFormat": "Stable P95 Latency",
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          }
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 39,
+      "tags": [
+        "sre",
+        "slo",
+        "error-budget",
+        "golden-signals",
+        "solidary-tech",
+        "argo-rollouts"
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "label": "Data Source",
+            "hide": 0,
+            "refresh": 1,
+            "current": {
+              "text": "Prometheus",
+              "value": "prometheus"
+            }
+          },
+          {
+            "name": "namespace",
+            "type": "query",
+            "label": "Namespace",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "query": "label_values(kube_pod_info{namespace=~\"(ngo-ns|donation-ns|volunteer-ns|monitoring-ns)\"}, namespace)",
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            }
+          },
+          {
+            "name": "service",
+            "type": "query",
+            "label": "Microsservi\u00e7o",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "query": "label_values({__name__=~\"http_requests_total|http_server_duration_milliseconds_bucket\"}, service_name)",
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": "ngo-service|donation-service|volunteer-service",
+            "multi": true,
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            }
+          },
+          {
+            "name": "slo_availability",
+            "type": "custom",
+            "label": "Alvo SLO Disponibilidade (%)",
+            "query": "99.90, 99.95, 99.99, 99.50, 99.00",
+            "current": {
+              "selected": true,
+              "text": "99.90",
+              "value": "99.90"
+            },
+            "hide": 0
+          },
+          {
+            "name": "slo_latency_target_ms",
+            "type": "custom",
+            "label": "Alvo Lat\u00eancia SLO (ms)",
+            "query": "300, 200, 250, 500, 1000",
+            "current": {
+              "selected": true,
+              "text": "300",
+              "value": "300"
+            },
+            "hide": 0
+          },
+          {
+            "name": "window",
+            "type": "custom",
+            "label": "Janela de SLO (Rolling Window)",
+            "query": "30d, 14d, 7d, 24h, 6h, 1h",
+            "current": {
+              "selected": true,
+              "text": "30d",
+              "value": "30d"
+            },
+            "hide": 0
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {
+        "refresh_intervals": [
+          "5s",
+          "10s",
+          "30s",
+          "1m",
+          "5m",
+          "15m",
+          "30m",
+          "1h",
+          "2h",
+          "1d"
+        ]
+      },
+      "timezone": "browser",
+      "title": "SolidaryTech \u2014 4 Golden Signals, SLOs & Error Budget Engine",
+      "uid": "solidary-golden-signals-slo",
+      "version": 1
+    }

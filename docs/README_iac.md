@@ -105,6 +105,49 @@ bash scripts/ansible.sh
 
 ---
 
+
+---
+
+## 🛡️ CI/CD & Segurança da Infraestrutura (DevSecOps IaC)
+
+Toda alteração de infraestrutura no diretório `iac/terraform` passa por uma esteira automatizada de governança em duas etapas no GitHub Actions:
+
+```text
+[ Push / PR em iac/terraform/** ]
+              │
+              ▼
+┌──────────────────────────────────────────────┐
+│ 1. tf-lint.yaml                              │
+│    ├── terraform init -backend=false         │
+│    ├── terraform validate                    │
+│    └── terraform fmt (auto-fix bot)          │
+└──────────────────────┬───────────────────────┘
+                       │ (workflow_run: success)
+                       ▼
+┌──────────────────────────────────────────────┐
+│ 2. tf-security.yaml                          │
+│    ├── Trivy IaC Scan (motor TFSec + CIS)    │
+│    ├── ai-issue-analyzer (Google Gemini)     │
+│    │   ├── Issue com código HCL corrigido    │
+│    │   └── Auto-close ao resolver problemas  │
+│    └── Bloqueio Parametrizado                │
+│        (block_on_critical: true/false)       │
+└──────────────────────────────────────────────┘
+```
+
+### 1. Validação & Lint: `tf-lint.yaml`
+- **Gatilho**: Disparado em `push` ou `pull_request` alterando arquivos dentro de `iac/terraform/**`.
+- **Ações**: Inicializa providers sem backend remoto, valida sintaxe (`terraform validate`) e corrige indentação HCL (`terraform fmt`).
+
+### 2. Scanner de Segurança & Triagem com IA: `tf-security.yaml`
+- **Gatilho Encadeado (`workflow_run`)**: Executado automaticamente após a conclusão com sucesso de `Terraform Lint & Validate`.
+- **Motor de Análise**: **Trivy IaC**, incorporando oficialmente as regras de mercado do **TFSec**, verificando configurações inseguras de rede, IAM, armazenamento e conformidade com CIS Benchmarks para GCP e AWS.
+- **Triagem com Google Gemini**: Invoca a action `ai-issue-analyzer` com `scan-type: iac`. A IA analisa as más configurações e abre uma GitHub Issue estruturada com o trecho exato de **código HCL corrigido**, impacto de segurança e plano de ação.
+- **Auto-fechamento**: Quando os problemas são sanados em um commit posterior, a pipeline encerra a Issue aberta de forma 100% autônoma.
+- **Bloqueio Parametrizado (`block_on_critical`)**:
+  - **Manual (`workflow_dispatch`)**: Caixa de seleção booleana (`true` ou `false`) para definir se falhas `HIGH` ou `CRITICAL` devem interromper a esteira.
+  - **Automático (`workflow_run`)**: Controlado pela variável `vars.TF_BLOCK_ON_CRITICAL` (ou valor padrão `true` no workflow).
+
 ## 🔒 Segurança e Melhores Práticas Aplicadas
 
 1. **Princípio do Menor Privilégio (PoLP):** Cada namespace do Kubernetes utiliza Service Accounts distintas mapeadas via GCP Workload Identity.

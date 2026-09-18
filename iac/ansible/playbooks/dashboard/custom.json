@@ -1,22 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    },
-    {
-      "name": "DS_LOKI",
-      "label": "Loki",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "loki",
-      "pluginName": "Loki"
-    }
-  ],
   "__requires": [
     {
       "type": "grafana",
@@ -94,7 +76,11 @@
         "hide": 0,
         "regex": "",
         "refresh": 1,
-        "current": {}
+        "current": {
+          "selected": true,
+          "text": "Prometheus",
+          "value": "prometheus"
+        }
       },
       {
         "name": "DS_LOKI",
@@ -104,7 +90,11 @@
         "hide": 0,
         "regex": "",
         "refresh": 1,
-        "current": {}
+        "current": {
+          "selected": true,
+          "text": "Loki",
+          "value": "loki"
+        }
       },
       {
         "name": "namespace",
@@ -669,7 +659,7 @@
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "expr": "{service_namespace=~\"$namespace\"}",
+          "expr": "{service_namespace=~\"$namespace\", service_name=~\"$service\"}",
           "queryType": "range"
         }
       ]

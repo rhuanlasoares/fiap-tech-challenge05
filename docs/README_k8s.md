@@ -49,7 +49,7 @@ Esta pasta contém todos os manifests e especificações declarativas para o eco
 | **`microsservices/`** | Manifests de deploy dos microsserviços (`ngo-service`, `donation-service`, `volunteer-service`, `job-service`) utilizando **Argo Rollouts**, Services, PDBs e HPA/KEDA. |
 | **`aiops/`** | Deployment, Service, ServiceAccount (GCP Workload Identity) e ClusterRole RBAC para o **AIOps Engine**. |
 | **`argocd/`** | Configurações do Argo CD Application e sincronização declarativa contínua do repositório Git. |
-| **`monitoring/`** | Regras de alertas dos 4 Golden Signals (`golden-signals-rules.yaml`) e Secret do New Relic (o watchdog do `gcp-status-checker` roda externamente no GitHub Actions). |
+| **`monitoring/`** | Regras de alertas dos 4 Golden Signals (`golden-signals-rules.yaml`), Dashboard SRE & Error Budget (`grafana-dashboard-golden-signals-slo.yaml`) provisionado via GitOps/Sidecar e Secret do New Relic. |
 | **`kubecost/`** | Roteamento HTTPRoute e parametrização do Kubecost para governança de custos (FinOps). |
 | **`namespaces/`** | Declaração dos namespaces da aplicação com labels de segurança e quotas. |
 
@@ -72,12 +72,17 @@ Em vez de deploys padrão `RollingUpdate`, utilizamos **Canary Releases** com an
 * O `donation-service` utiliza um `ScaledObject` do **KEDA** monitorando a fila da **Amazon SQS**.
 * Quando o backlog de mensagens aumenta, o KEDA escala o número de réplicas de 1 até 10 pods instantaneamente, retornando a zero ou à capacidade mínima quando a fila é drenada.
 
-### 4. Observabilidade Full-Stack & 4 Golden Signals
-* **Latência:** Duração média e p95/p99 de requisições por rota.
-* **Tráfego:** Taxa de requisições por segundo (RPS) atendidas.
-* **Erros:** Contagem e porcentagem de respostas HTTP 4xx e 5xx.
-* **Saturação:** Uso de CPU e Memória em relação aos Requests e Limits declarados.
-* **Telemetria Distribuída:** Coleta de spans e traces via **OpenTelemetry Collector** exportados diretamente para a plataforma **New Relic**.
+### 4. Observabilidade Full-Stack, Golden Signals & Gestão de SLOs
+* **Latência:** Duração média, P50, P90, P95 e P99 com limiares de alerta e heatmap.
+* **Tráfego:** Taxa de requisições por segundo (RPS) por serviço e detecção de anomalias/spikes.
+* **Erros:** Taxa de erro 5xx (% e RPS) e distribuição de status HTTP (2xx, 3xx, 4xx, 5xx).
+* **Saturação:** Uso de CPU e Memória (% do Limit) por container e rastreamento de OOMKills.
+* **Engine de SLOs & Error Budget (Google SRE):**
+  - Monitoramento contínuo de SLI de Disponibilidade (meta: 99.90%) e SLI de Latência (< 300ms).
+  - Cálculo em tempo real do **Error Budget Restante (%)** e **Consumo do Orçamento**.
+  - **Multi-Window Multi-Burn-Rate (1h, 6h, 24h, 3d)** para predição de esgotamento e disparo de alertas preventivos.
+  - Curva de Burn-down temporal e correlação de SLOs com Canary Releases (Argo Rollouts).
+* **Provisionamento GitOps:** O dashboard é carregado automaticamente no Grafana através do ConfigMap `k8s/monitoring/grafana-dashboard-golden-signals-slo.yaml` (sidecar auto-discovery na pasta *SRE & Platform Observability*).
 
 ### 5. FinOps com Kubecost
 * Auditoria de custos em tempo real por namespace, deployment e pod.
