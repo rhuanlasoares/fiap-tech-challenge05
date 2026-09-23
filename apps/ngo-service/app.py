@@ -30,9 +30,8 @@ def setup_telemetry(service_name: str, service_namespace: str):
     # 1. OpenTelemetry Logging (Loki)
     try:
         from opentelemetry._logs import set_logger_provider
-        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
-            OTLPLogExporter,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import \
+            OTLPLogExporter
         from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
         from opentelemetry.sdk.resources import Resource
@@ -72,13 +71,11 @@ def setup_telemetry(service_name: str, service_namespace: str):
     latency_histogram = None
     try:
         from opentelemetry import metrics
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
-            OTLPMetricExporter,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import \
+            OTLPMetricExporter
         from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import (
-            PeriodicExportingMetricReader,
-        )
+        from opentelemetry.sdk.metrics.export import \
+            PeriodicExportingMetricReader
         from opentelemetry.sdk.resources import Resource
 
         metric_resource = Resource.create(
@@ -148,6 +145,7 @@ def after_request(response):
         if response.status_code >= 500:
             try:
                 import newrelic.agent
+
                 newrelic.agent.notice_error()
             except Exception:
                 pass
@@ -266,6 +264,7 @@ def create_ngo():
             log.error("Erro ao criar ONG: %s", e)
             try:
                 import newrelic.agent
+
                 newrelic.agent.notice_error()
             except Exception:
                 pass
@@ -287,6 +286,7 @@ def get_ngos():
         log.error("Erro ao buscar ONGs: %s", e)
         try:
             import newrelic.agent
+
             newrelic.agent.notice_error()
         except Exception:
             pass
