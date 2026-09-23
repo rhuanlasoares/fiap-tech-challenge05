@@ -21,6 +21,16 @@ on:
         required: false
         type: boolean
         default: true
+      auto_remediate:
+        required: false
+        type: boolean
+        default: false
+        description: 'Habilita auto-remediacao com criacao de Pull Requests via IA'
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+        description: 'Simula a auto-remediacao sem criar branches ou PRs'
     secrets:
       TOKEN:
         required: true
@@ -137,6 +147,21 @@ jobs:
           github-token: "${{ secrets.TOKEN }}"
           output-file: "${{ inputs.service_path }}/issue-gosec.md"
 
+      # Auto-remediacao de vulnerabilidades de codigo com IA e validacao de testes
+      - name: AI Auto-Remediation — Gosec (Go)
+        if: inputs.auto_remediate == true
+        uses: ./.github/actions/ai-code-remediator
+        with:
+          scan-type: sast
+          tool-name: "Gosec"
+          report-file: "${{ inputs.service_path }}/gosec-results.json"
+          service-name: "${{ inputs.service_path }}"
+          service-path: "${{ inputs.service_path }}"
+          test-command: "go test ./..."
+          gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
+          github-token: "${{ secrets.TOKEN }}"
+          dry-run: "${{ inputs.dry_run }}"
+
   sast-python:
     if: inputs.language == 'python'
     name: SAST Python (${{ inputs.service_path }})
@@ -239,6 +264,21 @@ jobs:
           gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
           github-token: "${{ secrets.TOKEN }}"
           output-file: "${{ inputs.service_path }}/issue-bandit.md"
+
+      # Auto-remediacao de vulnerabilidades de codigo com IA e validacao de testes
+      - name: AI Auto-Remediation — Bandit (Python)
+        if: inputs.auto_remediate == true
+        uses: ./.github/actions/ai-code-remediator
+        with:
+          scan-type: sast
+          tool-name: "Bandit"
+          report-file: "${{ inputs.service_path }}/bandit-results.json"
+          service-name: "${{ inputs.service_path }}"
+          service-path: "${{ inputs.service_path }}"
+          test-command: "pytest"
+          gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
+          github-token: "${{ secrets.TOKEN }}"
+          dry-run: "${{ inputs.dry_run }}"
 
   secret-scan:
     name: Secret Scan (${{ inputs.service_path }})

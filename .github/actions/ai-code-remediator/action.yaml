@@ -1,0 +1,86 @@
+name: 'AI Code Remediator with Gemini'
+description: 'Analisa relatórios de segurança, gera patches seguros com Gemini, valida testes unitários e abre Pull Requests automaticamente.'
+inputs:
+  scan-type:
+    description: 'Tipo de scan: sast, iac, sca, container, lint'
+    required: true
+  tool-name:
+    description: 'Nome da ferramenta (ex: Gosec, Bandit, Trivy, Checkov)'
+    required: true
+  report-file:
+    description: 'Arquivo de relatório JSON ou SARIF'
+    required: true
+  service-name:
+    description: 'Nome do serviço (ex: donation-service)'
+    required: true
+  service-path:
+    description: 'Caminho do serviço (ex: apps/donation-service ou iac/terraform)'
+    required: false
+    default: '.'
+  test-command:
+    description: 'Comando de teste para validar o patch (ex: go test ./..., pytest, terraform validate)'
+    required: false
+    default: ''
+  gemini-api-key:
+    description: 'Chave de API do Google AI Studio'
+    required: true
+  github-token:
+    description: 'Token do GitHub com permissões contents: write e pull-requests: write'
+    required: true
+  language:
+    description: 'Idioma para resumos e Pull Requests (ex: pt-BR, en-US)'
+    required: false
+    default: 'pt-BR'
+  model:
+    description: 'Modelo Gemini a ser utilizado'
+    required: false
+    default: 'gemini-2.5-flash'
+  dry-run:
+    description: 'Se true, simula a remediação e exibe o diff sem criar branch ou PR'
+    required: false
+    default: 'false'
+  base-branch:
+    description: 'Branch base para o Pull Request'
+    required: false
+    default: 'main'
+  max-auto-fixes:
+    description: 'Número máximo de vulnerabilidades a remediar por execução'
+    required: false
+    default: '2'
+
+outputs:
+  remediation-applied:
+    description: 'Indica se alguma remediação foi aplicada com sucesso (true ou false)'
+    value: ${{ steps.remediate.outputs.remediation_applied }}
+  pr-urls:
+    description: 'Lista de URLs dos Pull Requests criados'
+    value: ${{ steps.remediate.outputs.pr_urls }}
+  status:
+    description: 'Status final da remediação (success, dry_run, tests_failed, no_fixable_vulns)'
+    value: ${{ steps.remediate.outputs.status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Executar Auto-Remediação com IA (Gemini)'
+      id: remediate
+      shell: bash
+      env:
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        python3 "${{ github.action_path }}/remediate.py" \
+          --scan-type "${{ inputs.scan-type }}" \
+          --tool-name "${{ inputs.tool-name }}" \
+          --report-file "${{ inputs.report-file }}" \
+          --service-name "${{ inputs.service-name }}" \
+          --service-path "${{ inputs.service-path }}" \
+          --test-command "${{ inputs.test-command }}" \
+          --language "${{ inputs.language }}" \
+          --model "${{ inputs.model }}" \
+          --dry-run "${{ inputs.dry-run }}" \
+          --base-branch "${{ inputs.base-branch }}" \
+          --max-auto-fixes "${{ inputs.max-auto-fixes }}" \
+          --gemini-api-key "${{ inputs.gemini-api-key }}" \
+          --github-token "${{ inputs.github-token }}"

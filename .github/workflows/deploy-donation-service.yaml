@@ -8,6 +8,17 @@ on:
     branches: [main]
     paths: ["apps/donation-service/**"]
   workflow_dispatch:
+    inputs:
+      auto_remediate:
+        description: "Habilitar auto-remediacao de codigo com IA?"
+        type: boolean
+        required: false
+        default: true
+      dry_run:
+        description: "Simular a remediacao sem criar branch ou PR?"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -46,7 +57,7 @@ jobs:
       language: golang
       service_path: apps/donation-service
       block_on_critical: true
-      go_version: "1.26"
+      go_version: "1.26" 
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -60,6 +71,8 @@ jobs:
       service_path: apps/donation-service
       block_on_critical: true
       go_version: "1.26"
+      auto_remediate: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.auto_remediate == 'true' || false }}
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' || false }}
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

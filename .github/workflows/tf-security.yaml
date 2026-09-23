@@ -20,13 +20,23 @@ on:
           - en-US
         required: false
         default: pt-BR
+      auto_remediate:
+        description: "Habilitar auto-remediacao de IaC com abertura de Pull Request via IA?"
+        type: boolean
+        required: false
+        default: false
+      dry_run:
+        description: "Simular a remediacao sem criar branch ou PR?"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha || github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   issues: write
   pull-requests: write
 
@@ -83,6 +93,21 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           output-file: "iac/terraform/issue-tf-security.md"
           language: ${{ env.LANGUAGE }}
+
+      - name: Auto-Remediacao de IaC com IA (Gemini)
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.auto_remediate == 'true') || vars.TF_AUTO_REMEDIATE == 'true' }}
+        uses: ./.github/actions/ai-code-remediator
+        with:
+          scan-type: iac
+          tool-name: "Trivy IaC (TFSec)"
+          report-file: "iac/terraform/trivy-iac-results.json"
+          service-name: "iac-terraform"
+          service-path: "iac/terraform"
+          test-command: "terraform -chdir=iac/terraform validate"
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          language: ${{ env.LANGUAGE }}
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
 
       - name: Avaliar Severidade e Bloqueio Parametrizado
         id: check-blocking
