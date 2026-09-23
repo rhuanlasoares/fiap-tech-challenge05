@@ -6,7 +6,11 @@ on:
     paths: ["apps/donation-service/**"]
   pull_request:
     branches: [main]
-    paths: ["apps/donation-service/**"]
+    paths:
+      - "apps/donation-service/**"
+      - ".github/workflows/deploy-donation-service.yaml"
+      - ".github/workflows/reusable-sast.yaml"
+      - ".github/actions/ai-code-remediator/**"
   workflow_dispatch:
     inputs:
       auto_remediate:
@@ -57,7 +61,7 @@ jobs:
       language: golang
       service_path: apps/donation-service
       block_on_critical: true
-      go_version: "1.26" 
+      go_version: "1.26"
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -71,7 +75,7 @@ jobs:
       service_path: apps/donation-service
       block_on_critical: true
       go_version: "1.26"
-      auto_remediate: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.auto_remediate == 'true' || false }}
+      auto_remediate: true
       dry_run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' || false }}
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,10 +1,18 @@
-name: 🛡️ Terraform Security Scan (IaC)
+name: 🛡️ Pipeline — Terraform IaC (Lint, Validate & Security)
 
 on:
-  workflow_run:
-    workflows: ["Terraform Lint & Validate"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
+    paths:
+      - 'iac/terraform/**'
+      - '.github/workflows/tf-security.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'iac/terraform/**'
+      - '.github/workflows/tf-security.yaml'
   workflow_dispatch:
     inputs:
       block_on_critical:
@@ -24,7 +32,7 @@ on:
         description: "Habilitar auto-remediacao de IaC com abertura de Pull Request via IA?"
         type: boolean
         required: false
-        default: false
+        default: true
       dry_run:
         description: "Simular a remediacao sem criar branch ou PR?"
         type: boolean
@@ -32,8 +40,8 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: write
@@ -46,9 +54,55 @@ env:
   LANGUAGE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.language || vars.TF_SCAN_LANGUAGE || 'pt-BR' }}
 
 jobs:
+  lint-and-validate:
+    name: 🔍 Terraform Format & Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    defaults:
+      run:
+        working-directory: iac/terraform
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Initialize Terraform (Backend Disabled)
+        id: init
+        run: terraform init -backend=false
+
+      - name: Validate Terraform Configuration
+        id: validate
+        run: terraform validate
+
+      - name: Check Terraform Formatting
+        id: fmt
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Auto-Format Terraform Files (Push if needed)
+        if: steps.fmt.outcome == 'failure' && github.event_name == 'push'
+        run: |
+          terraform fmt -recursive
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "style(terraform): auto-format .tf files via github actions [skip ci]" || echo "No changes to commit"
+          git push origin ${{ github.ref_name }}
+
   tf-security:
-    name: Terraform Security (Trivy & TFSec)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    name: 🛡️ Terraform Security (Trivy & TFSec)
+    needs: [lint-and-validate]
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -56,7 +110,7 @@ jobs:
       - name: Checkout do Repositório
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ github.head_ref || github.ref }}
           fetch-depth: 0
 
       - name: Executar Trivy IaC Scan (JSON para IA)
@@ -95,7 +149,7 @@ jobs:
           language: ${{ env.LANGUAGE }}
 
       - name: Auto-Remediacao de IaC com IA (Gemini)
-        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.auto_remediate == 'true') || vars.TF_AUTO_REMEDIATE == 'true' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.auto_remediate == 'true') || (github.event_name == 'pull_request') || vars.TF_AUTO_REMEDIATE == 'true' }}
         uses: ./.github/actions/ai-code-remediator
         with:
           scan-type: iac

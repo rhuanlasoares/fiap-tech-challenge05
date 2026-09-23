@@ -6,7 +6,11 @@ on:
     paths: ["apps/ngo-service/**"]
   pull_request:
     branches: [main]
-    paths: ["apps/ngo-service/**"]
+    paths:
+      - "apps/ngo-service/**"
+      - ".github/workflows/deploy-ngo-service.yaml"
+      - ".github/workflows/reusable-sast.yaml"
+      - ".github/actions/ai-code-remediator/**"
   workflow_dispatch:
 
 concurrency:
@@ -60,6 +64,7 @@ jobs:
       service_path: apps/ngo-service
       block_on_critical: true
       python_version: "3.12.14"
+      auto_remediate: true
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

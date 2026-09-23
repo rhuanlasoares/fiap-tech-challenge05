@@ -6,7 +6,11 @@ on:
     paths: ["apps/aiops-engine/**"]
   pull_request:
     branches: [main]
-    paths: ["apps/aiops-engine/**"]
+    paths:
+      - "apps/aiops-engine/**"
+      - ".github/workflows/deploy-aiops.yaml"
+      - ".github/workflows/reusable-sast.yaml"
+      - ".github/actions/ai-code-remediator/**"
   workflow_dispatch:
 
 concurrency:
@@ -60,6 +64,7 @@ jobs:
       service_path: apps/aiops-engine
       block_on_critical: true
       python_version: "3.12.14"
+      auto_remediate: true
     secrets:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
