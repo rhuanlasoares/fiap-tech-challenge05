@@ -63,7 +63,7 @@ variable "min_node_count" {
 variable "max_node_count" {
   type        = number
   description = "The maximum number of nodes per zone in the Node Pool."
-  default     = 5
+  default     = 6
 }
 
 variable "initial_node_count" {

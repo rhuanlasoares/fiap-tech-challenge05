@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -83,11 +83,13 @@ class AasReasoner:
     ) -> Optional[Dict[str, Any]]:
         import google.generativeai as genai
 
+        language = settings.AIOPS_LANGUAGE
         prompt = (
             "You are an expert SRE and AIOps Engineer monitoring a GKE cluster running Cloud SQL, DynamoDB, SQS, and microservices (Donation, NGO, Volunteer).\n"
             "Analyze this incident telemetry:\n"
             + json.dumps(item, indent=2, default=str)
-            + "\nProvide RCA in strict JSON format: {title, severity, affected_service, probable_root_cause, time_to_impact_minutes, recommended_action, prevention_playbook}"
+            + "\nProvide RCA in strict JSON format: {title, severity, affected_service, probable_root_cause, time_to_impact_minutes, recommended_action, prevention_playbook}.\n"
+            f"LANGUAGE REQUIREMENT: All textual values (title, probable_root_cause, recommended_action, prevention_playbook) MUST be strictly written in language '{language}' (Default: Portuguese Brazil / Português do Brasil)."
         )
 
         candidates = [
@@ -135,9 +137,24 @@ class AasReasoner:
         svc_pod = str(
             item.get("pod") or item.get("service") or item.get("pvc") or "unknown"
         )
+        is_pt = settings.AIOPS_LANGUAGE.lower().startswith("pt")
 
         if item_type == "MEMORY_LEAK_PREDICTION":
             mins = item.get("estimated_minutes_to_failure", 45)
+            if is_pt:
+                return {
+                    "title": f"Vazamento de Memória Detectado em {svc_pod}",
+                    "severity": item.get("severity", "CRITICAL"),
+                    "affected_service": svc_pod,
+                    "probable_root_cause": f"Aumento linear contínuo de consumo de memória sem desalocação pelo Garbage Collector. O container será terminado pelo Kernel OOM em aproximadamente {mins} minutos.",
+                    "time_to_impact_minutes": mins,
+                    "recommended_action": f"Executar rollout restart preventivo via kubectl rollout restart deployment/{svc_pod} -n {namespace} antes do esgotamento total.",
+                    "prevention_playbook": [
+                        "Passo 1: Disparar rollout restart preventivo para liberar alocações de memória heap.",
+                        "Passo 2: Inspecionar profiling de variáveis globais, conexões não encerradas e buffers de I/O.",
+                        "Passo 3: Expandir temporariamente os limites de memória no manifesto de deployment.",
+                    ],
+                }
             return {
                 "title": f"Memory Leak Detected in {svc_pod}",
                 "severity": item.get("severity", "CRITICAL"),
@@ -151,12 +168,28 @@ class AasReasoner:
                     "Step 3: Temporarily expand resource limits in deployment manifest.",
                 ],
             }
+
         elif item_type == "HTTP_5XX_ERROR_RATE_ANOMALY":
+            err_val = item.get("current_value", 0)
+            if is_pt:
+                return {
+                    "title": f"Surto Excessivo de Erros HTTP 5xx em {svc_pod}",
+                    "severity": "CRITICAL",
+                    "affected_service": svc_pod,
+                    "probable_root_cause": f"Exceções não tratadas na aplicação ou timeout de comunicação com Cloud SQL / SQS. Taxa de erro em {err_val}%.",
+                    "time_to_impact_minutes": 0,
+                    "recommended_action": "Inspecionar pods do Cloud SQL Proxy e verificar integridade das credenciais de banco e filas.",
+                    "prevention_playbook": [
+                        "Passo 1: Verificar saturação do pool de conexões do Cloud SQL.",
+                        "Passo 2: Consultar logs recentes no Loki para identificar exceções e stack traces.",
+                        "Passo 3: Verificar traces no OpenTelemetry Collector para isolar o endpoint em falha.",
+                    ],
+                }
             return {
                 "title": f"Excessive HTTP 5xx Surge on {svc_pod}",
                 "severity": "CRITICAL",
                 "affected_service": svc_pod,
-                "probable_root_cause": f"Unhandled exceptions or upstream Cloud SQL / AWS authentication timeout. Error rate at {item.get('current_value')}%.",
+                "probable_root_cause": f"Unhandled exceptions or upstream Cloud SQL / AWS authentication timeout. Error rate at {err_val}%.",
                 "time_to_impact_minutes": 0,
                 "recommended_action": "Inspect Cloud SQL Proxy pods and verify database user authentication secrets.",
                 "prevention_playbook": [
@@ -165,7 +198,21 @@ class AasReasoner:
                     "Step 3: Verify otel-collector tracing spans for identifying the failing endpoint.",
                 ],
             }
+
         elif item_type == "LATENCY_DEGRADATION_ANOMALY":
+            if is_pt:
+                return {
+                    "title": f"Degradação Severa de Latência em {svc_pod}",
+                    "severity": "WARNING",
+                    "affected_service": svc_pod,
+                    "probable_root_cause": "Locks em banco de dados, queries lentas ou throttling de CPU causando pico na latência p99.",
+                    "time_to_impact_minutes": 5,
+                    "recommended_action": "Escalar réplicas do pod e inspecionar pg_stat_activity para queries concorrentes.",
+                    "prevention_playbook": [
+                        "Passo 1: Aumentar réplicas do pod via KEDA / HPA.",
+                        "Passo 2: Analisar locks no PostgreSQL ou esgotamento de throughput no DynamoDB.",
+                    ],
+                }
             return {
                 "title": f"Severe Latency Degradation on {svc_pod}",
                 "severity": "WARNING",
@@ -178,7 +225,55 @@ class AasReasoner:
                     "Step 2: Analyze postgres locks or DynamoDB provisioned throughput exhaustion.",
                 ],
             }
+
+        elif item_type == "STORAGE_EXHAUSTION_PREDICTION":
+            hs = item.get("estimated_hours_to_failure", 24)
+            used = item.get("used_pct", 85)
+            if is_pt:
+                return {
+                    "title": f"Risco de Esgotamento de Disco no PVC {svc_pod}",
+                    "severity": item.get("severity", "WARNING"),
+                    "affected_service": svc_pod,
+                    "probable_root_cause": f"Volume persistente próximo do limite ({used}% ocupado). Projeção de esgotamento em {hs} horas.",
+                    "time_to_impact_minutes": int(hs * 60) if hs else 60,
+                    "recommended_action": "Expandir capacidade do PVC via StorageClass ou efetuar limpeza de logs e arquivos temporários.",
+                    "prevention_playbook": [
+                        "Passo 1: Expandir o PVC via StorageClass com suporte a expansão dinâmica.",
+                        "Passo 2: Realizar purga de arquivos e dumps antigos no volume.",
+                    ],
+                }
+            return {
+                "title": f"Storage Exhaustion Risk on PVC {svc_pod}",
+                "severity": item.get("severity", "WARNING"),
+                "affected_service": svc_pod,
+                "probable_root_cause": f"Persistent volume near full capacity ({used}% used). Projected to exhaust in {hs} hours.",
+                "time_to_impact_minutes": int(hs * 60) if hs else 60,
+                "recommended_action": "Expand PVC capacity via StorageClass or cleanup old logs/data.",
+                "prevention_playbook": [
+                    "Step 1: Increase PVC storage size in manifest.",
+                    "Step 2: Purge transient log files and temporary data.",
+                ],
+            }
+
         else:
+            if is_pt:
+                return {
+                    "title": f"Risco de Telemetria no Sistema em {svc_pod}",
+                    "severity": item.get("severity", "INFO"),
+                    "affected_service": svc_pod,
+                    "probable_root_cause": str(
+                        item.get("message", "Telemetria anômala detectada no sistema.")
+                    ),
+                    "time_to_impact_minutes": 15,
+                    "recommended_action": str(
+                        item.get("recommendation", "Inspecionar telemetria e logs dos pods.")
+                    ),
+                    "prevention_playbook": [
+                        "Verificar métricas no Prometheus",
+                        "Consultar logs de erro no Loki",
+                        "Verificar eventos de alerta no Kubernetes",
+                    ],
+                }
             return {
                 "title": f"System Telemetry Risk in {svc_pod}",
                 "severity": item.get("severity", "INFO"),

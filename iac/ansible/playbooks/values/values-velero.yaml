@@ -99,6 +99,7 @@ schedules:
         - volunteer-ns
         - argocd
         - aiops
+        - gateway-api-ns
 
   # 🔵 2. Backup Diário Completo do Cluster (Infraestrutura, Gateways, Keda, etc.)
   daily-full-cluster:

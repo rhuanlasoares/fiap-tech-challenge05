@@ -1,7 +1,9 @@
-import logging
+﻿import logging
 from typing import Any, Dict, List
 
 import numpy as np
+
+from core.config import settings
 
 logger = logging.getLogger("aiops.predictor")
 
@@ -14,6 +16,7 @@ class AiOpsPredictor:
         self, mem_metrics: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         risks = []
+        is_pt = settings.AIOPS_LANGUAGE.lower().startswith("pt")
         for item in mem_metrics:
             values = item.get("values", [])
             limit_bytes = float(item.get("limit_bytes", 0.0))
@@ -43,6 +46,19 @@ class AiOpsPredictor:
 
                 if minutes_to_oom < 120:
                     severity = "CRITICAL" if minutes_to_oom < 30 else "WARNING"
+                    if is_pt:
+                        msg = (
+                            f"Pod {item.get('pod')} se aproximando de OOMKilled! "
+                            f"Uso atual: {current_pct}% do limite, crescendo a {round(slope / 1024, 1)} KB/s."
+                        )
+                        rec = "Agendar rollout restart gracioso ou aumentar limite de memória para prevenir OOMKilled."
+                    else:
+                        msg = (
+                            f"Pod {item.get('pod')} approaching OOMKilled! "
+                            f"Current: {current_pct}% of limit, growing at {round(slope / 1024, 1)} KB/s."
+                        )
+                        rec = "Schedule graceful rollout restart or expand memory limit to prevent OOMKilled."
+
                     risks.append(
                         {
                             "id": f"oom_leak_{item.get('namespace')}_{item.get('pod')}",
@@ -51,11 +67,11 @@ class AiOpsPredictor:
                             "namespace": item.get("namespace"),
                             "pod": item.get("pod"),
                             "container": item.get("container"),
-                            "message": f"Pod {item.get('pod')} approaching OOMKilled! Current: {current_pct}% of limit, growing at {round(slope / 1024, 1)} KB/s.",
+                            "message": msg,
                             "current_usage_mb": round(current_bytes / (1024 * 1024), 1),
                             "limit_mb": round(limit_bytes / (1024 * 1024), 1),
                             "estimated_minutes_to_failure": minutes_to_oom,
-                            "recommendation": "Schedule graceful rollout restart or expand memory limit to prevent OOMKilled.",
+                            "recommendation": rec,
                         }
                     )
         return risks
@@ -64,14 +80,21 @@ class AiOpsPredictor:
         self, signals: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         anomalies = []
+        is_pt = settings.AIOPS_LANGUAGE.lower().startswith("pt")
         for sig in signals:
             svc = sig.get("service")
             ns = sig.get("namespace")
             err_pct = float(sig.get("error_rate_pct", 0.0))
             p99_ms = float(sig.get("p99_latency_ms", 0.0))
-            rps = float(sig.get("req_per_sec", 0.0))
 
             if err_pct > 5.0:
+                if is_pt:
+                    msg = f"Serviço {svc} com taxa anômala de erros HTTP de {err_pct}%."
+                    rec = "Verificar conectividade com banco de dados e logs de erro do pod para exceções."
+                else:
+                    msg = f"Service {svc} has an anomalous error rate of {err_pct}%."
+                    rec = "Check database connectivity and pod logs for unhandled exceptions."
+
                 anomalies.append(
                     {
                         "id": f"err_spike_{ns}_{svc}",
@@ -79,14 +102,21 @@ class AiOpsPredictor:
                         "severity": "CRITICAL" if err_pct > 25.0 else "WARNING",
                         "namespace": ns,
                         "service": svc,
-                        "message": f"Service {svc} has an anomalous error rate of {err_pct}%.",
+                        "message": msg,
                         "current_value": err_pct,
                         "unit": "%",
-                        "recommendation": "Check database connectivity and pod logs for unhandled exceptions.",
+                        "recommendation": rec,
                     }
                 )
 
             if p99_ms > 1000.0:
+                if is_pt:
+                    msg = f"Latência do serviço {svc} está inaceitavelmente alta (p99={p99_ms}ms)."
+                    rec = "Inspecionar consultas lentas no Cloud SQL ou atrasos na fila SQS."
+                else:
+                    msg = f"Service {svc} latency is unacceptably high (p99={p99_ms}ms)."
+                    rec = "Inspect downstream queries in Cloud SQL or SQS backlog delays."
+
                 anomalies.append(
                     {
                         "id": f"lat_spike_{ns}_{svc}",
@@ -94,20 +124,28 @@ class AiOpsPredictor:
                         "severity": "CRITICAL" if p99_ms > 3000.0 else "WARNING",
                         "namespace": ns,
                         "service": svc,
-                        "message": f"Service {svc} latency is unacceptably high (p99={p99_ms}ms).",
+                        "message": msg,
                         "current_value": p99_ms,
                         "unit": "ms",
-                        "recommendation": "Inspect downstream queries in Cloud SQL or SQS backlog delays.",
+                        "recommendation": rec,
                     }
                 )
         return anomalies
 
     def analyze_storage_risks(self, pvcs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         risks = []
+        is_pt = settings.AIOPS_LANGUAGE.lower().startswith("pt")
         for pvc in pvcs:
             hs_full = float(pvc.get("hours_to_full", 999.0))
             used_pct = float(pvc.get("used_pct", 0.0))
             if used_pct > 85.0 or hs_full < 24.0:
+                if is_pt:
+                    msg = f"PVC {pvc.get('pvc')} está com {used_pct}% de uso. Previsão de esgotamento em {hs_full} horas."
+                    rec = "Expandir capacidade do PVC via StorageClass ou limpar logs/dados antigos."
+                else:
+                    msg = f"PVC {pvc.get('pvc')} is {used_pct}% full. Projected to exhaust in {hs_full} hours."
+                    rec = "Expand PVC capacity via StorageClass or cleanup old logs/data."
+
                 risks.append(
                     {
                         "id": f"disk_full_{pvc.get('namespace')}_{pvc.get('pvc')}",
@@ -115,9 +153,9 @@ class AiOpsPredictor:
                         "severity": "CRITICAL" if used_pct > 92.0 else "WARNING",
                         "namespace": pvc.get("namespace"),
                         "pvc": pvc.get("pvc"),
-                        "message": f"PVC {pvc.get('pvc')} is {used_pct}% full. Projected to exhaust in {hs_full} hours.",
+                        "message": msg,
                         "estimated_hours_to_failure": hs_full,
-                        "recommendation": "Expand PVC capacity via StorageClass or cleanup old logs/data.",
+                        "recommendation": rec,
                     }
                 )
         return risks

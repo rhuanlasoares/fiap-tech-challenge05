@@ -59,7 +59,7 @@ jobs:
           pip install -r apps/gcp-status-checker/requirements.txt
 
       - name: 🔑 Autenticação no GCP via WIF (Acesso ao Bucket GCS de Estado)
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         continue-on-error: true
         with:
           project_id: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}

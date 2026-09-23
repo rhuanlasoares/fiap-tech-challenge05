@@ -101,23 +101,42 @@ class PrometheusClient:
         return trends
 
     def get_http_golden_signals(self, namespaces: List[str]) -> List[Dict[str, Any]]:
+        target_services = ["ngo-service", "donation-service", "volunteer-service", "aiops-engine"]
+        svc_regex = "|".join(target_services)
         ns_regex = "|".join(namespaces)
 
-        rate_query = f'sum by (namespace, service, job) (rate(http_requests_total{{namespace=~"{ns_regex}"}}[2m]))'
-        errors_query = f'sum by (namespace, service, job) (rate(http_requests_total{{namespace=~"{ns_regex}", status=~"5.."}}[2m]))'
-        lat95 = f'histogram_quantile(0.95, sum by (le, namespace, service) (rate(http_request_duration_seconds_bucket{{namespace=~"{ns_regex}"}}[5m])))'
-        lat99 = f'histogram_quantile(0.99, sum by (le, namespace, service) (rate(http_request_duration_seconds_bucket{{namespace=~"{ns_regex}"}}[5m])))'
+        # 1. Total Requests Rate (busca flexível por service_name, service ou namespace)
+        rate_query = (
+            f'sum by (service_name, service, namespace, job) '
+            f'(rate(http_requests_total{{service_name=~"{svc_regex}"}}[2m])) '
+            f'or sum by (service_name, service, namespace, job) '
+            f'(rate(http_requests_total{{namespace=~"{ns_regex}"}}[2m]))'
+        )
+
+        # 2. Errors 5xx Rate
+        errors_query = (
+            f'sum by (service_name, service, namespace, job) '
+            f'(rate(http_requests_total{{service_name=~"{svc_regex}", status=~"5.."}}[2m])) '
+            f'or sum by (service_name, service, namespace, job) '
+            f'(rate(http_requests_total{{namespace=~"{ns_regex}", status=~"5.."}}[2m]))'
+        )
+
+        # 3. Latência P95 e P99 (suportando tanto segundos quanto milissegundos)
+        lat95_sec = 'histogram_quantile(0.95, sum by (le, service_name, service, namespace) (rate(http_request_duration_seconds_bucket[5m])))'
+        lat95_ms = 'histogram_quantile(0.95, sum by (le, service_name, service, namespace) (rate(http_server_duration_milliseconds_bucket[5m])))'
+        lat99_sec = 'histogram_quantile(0.99, sum by (le, service_name, service, namespace) (rate(http_request_duration_seconds_bucket[5m])))'
+        lat99_ms = 'histogram_quantile(0.99, sum by (le, service_name, service, namespace) (rate(http_server_duration_milliseconds_bucket[5m])))'
 
         rates = self.query(rate_query) or []
         errors = self.query(errors_query) or []
-        l95 = self.query(lat95) or []
-        l99 = self.query(lat99) or []
+        l95 = (self.query(lat95_sec) or []) + (self.query(lat95_ms) or [])
+        l99 = (self.query(lat99_sec) or []) + (self.query(lat99_ms) or [])
 
         signals = {}
         for r in rates:
             metric = r.get("metric", {})
-            svc = metric.get("service") or metric.get("job") or "unknown"
-            ns = metric.get("namespace", "default")
+            svc = metric.get("service_name") or metric.get("service") or metric.get("job") or "unknown"
+            ns = metric.get("namespace") or metric.get("service_namespace") or "default"
             key = f"{ns}/{svc}"
             val = float(r.get("value", [0, 0])[1])
             signals[key] = {
@@ -132,8 +151,8 @@ class PrometheusClient:
 
         for e in errors:
             metric = e.get("metric", {})
-            svc = metric.get("service") or metric.get("job") or "unknown"
-            ns = metric.get("namespace", "default")
+            svc = metric.get("service_name") or metric.get("service") or metric.get("job") or "unknown"
+            ns = metric.get("namespace") or metric.get("service_namespace") or "default"
             key = f"{ns}/{svc}"
             err_val = float(e.get("value", [0, 0])[1])
             if key in signals:
@@ -141,24 +160,37 @@ class PrometheusClient:
                 rps = signals[key]["req_per_sec"]
                 if rps > 0:
                     signals[key]["error_rate_pct"] = round((err_val / rps) * 100, 2)
+            else:
+                # Quando só houve erros 5xx (nenhuma requisição com sucesso)
+                signals[key] = {
+                    "namespace": ns,
+                    "service": svc,
+                    "req_per_sec": round(err_val, 2),
+                    "error_5xx_per_sec": round(err_val, 2),
+                    "error_rate_pct": 100.0,
+                    "p95_latency_ms": 0.0,
+                    "p99_latency_ms": 0.0,
+                }
 
         for l in l95:
             metric = l.get("metric", {})
-            svc = metric.get("service") or metric.get("job") or "unknown"
-            ns = metric.get("namespace", "default")
+            svc = metric.get("service_name") or metric.get("service") or metric.get("job") or "unknown"
+            ns = metric.get("namespace") or metric.get("service_namespace") or "default"
             key = f"{ns}/{svc}"
             val = float(l.get("value", [0, 0])[1])
             if key in signals and val > 0:
-                signals[key]["p95_latency_ms"] = round(val * 1000, 2)
+                ms_val = val * 1000 if val < 10 else val
+                signals[key]["p95_latency_ms"] = round(ms_val, 2)
 
         for l in l99:
             metric = l.get("metric", {})
-            svc = metric.get("service") or metric.get("job") or "unknown"
-            ns = metric.get("namespace", "default")
+            svc = metric.get("service_name") or metric.get("service") or metric.get("job") or "unknown"
+            ns = metric.get("namespace") or metric.get("service_namespace") or "default"
             key = f"{ns}/{svc}"
             val = float(l.get("value", [0, 0])[1])
             if key in signals and val > 0:
-                signals[key]["p99_latency_ms"] = round(val * 1000, 2)
+                ms_val = val * 1000 if val < 10 else val
+                signals[key]["p99_latency_ms"] = round(ms_val, 2)
 
         return list(signals.values())
 

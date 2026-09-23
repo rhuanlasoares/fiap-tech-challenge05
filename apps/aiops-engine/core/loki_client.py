@@ -1,6 +1,7 @@
-import logging
+﻿import logging
+import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -55,3 +56,64 @@ class LokiClient:
         except Exception as e:
             logger.debug(f"Error querying Loki: {e}")
         return []
+
+    def push_log(
+        self,
+        message: str,
+        level: str = "INFO",
+        extra_labels: Optional[Dict[str, str]] = None,
+    ) -> bool:
+        """Envia uma linha de log estruturada diretamente para a API de ingestao do Loki (/loki/api/v1/push)."""
+        url = f"{self.base_url}/loki/api/v1/push"
+        now_ns = str(int(datetime.now(timezone.utc).timestamp() * 1e9))
+
+        stream_labels = {
+            "service_name": "aiops-engine",
+            "service_namespace": "aiops",
+            "app": "aiops-engine",
+            "level": level.upper(),
+        }
+        if extra_labels:
+            stream_labels.update(extra_labels)
+
+        payload = {
+            "streams": [
+                {
+                    "stream": stream_labels,
+                    "values": [[now_ns, message]],
+                }
+            ]
+        }
+        try:
+            resp = requests.post(
+                url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=3,
+            )
+            return resp.status_code in (200, 204)
+        except Exception as e:
+            logger.debug(f"Failed to push log to Loki ({url}): {e}")
+            return False
+
+
+class LokiLoggingHandler(logging.Handler):
+    """Handler padrao do Python Logging que despacha logs automaticamente para o Grafana Loki."""
+
+    def __init__(self, loki_client: LokiClient):
+        super().__init__()
+        self.loki_client = loki_client
+
+    def emit(self, record: logging.LogRecord):
+        # Evita loops recursivos de logging causados pelas bibliotecas HTTP ou pelo proprio modulo do Loki
+        if (
+            record.name.startswith("aiops.loki")
+            or record.name.startswith("urllib3")
+            or record.name.startswith("requests")
+        ):
+            return
+        try:
+            msg = self.format(record)
+            self.loki_client.push_log(msg, level=record.levelname)
+        except Exception:
+            self.handleError(record)

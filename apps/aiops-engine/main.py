@@ -1,7 +1,8 @@
-import asyncio
+﻿import asyncio
 import logging
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 from core.ai_reasoner import AasReasoner
 from core.config import settings
 from core.k8s_client import K8sClient
-from core.loki_client import LokiClient
+from core.loki_client import LokiClient, LokiLoggingHandler
 from core.predictor import AiOpsPredictor
 from core.prometheus_client import PrometheusClient
 from core.remediator import AiOpsRemediator, send_slack_alert
@@ -30,6 +31,14 @@ k8s = K8sClient()
 predictor = AiOpsPredictor()
 reasoner = AasReasoner()
 remediator = AiOpsRemediator(k8s)
+
+# Conecta handler do Loki para encaminhamento automatico de logs ao Grafana
+loki_handler = LokiLoggingHandler(loki)
+loki_handler.setLevel(logging.INFO)
+loki_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
+logger.addHandler(loki_handler)
 
 state_lock = threading.Lock()
 
@@ -76,6 +85,77 @@ def sync_analysis_cycle():
             all_predictions, all_anomalies, events
         )
 
+        # Emissao de prints e encaminhamento estruturado ao Loki / Grafana
+        if mem_risks:
+            for risk in mem_risks:
+                pod = risk.get("pod", "unknown")
+                ns = risk.get("namespace", "unknown")
+                sev = risk.get("severity", "WARNING")
+                msg = risk.get("message", "")
+                mins = risk.get("estimated_minutes_to_failure", 0)
+                log_line = (
+                    f"[AIOPS-ALERT] [MEMORY_LEAK] Pod: {pod} | Namespace: {ns} | "
+                    f"Severidade: {sev} | {msg} | Tempo estimado: {mins}min"
+                )
+                print(log_line)
+                logger.warning(log_line)
+                loki.push_log(
+                    message=log_line,
+                    level="ERROR" if sev == "CRITICAL" else "WARN",
+                    extra_labels={
+                        "alert_type": "MEMORY_LEAK",
+                        "severity": sev,
+                        "target_pod": pod,
+                        "target_namespace": ns,
+                    },
+                )
+
+        if storage_risks:
+            for risk in storage_risks:
+                pvc = risk.get("pvc", "unknown")
+                ns = risk.get("namespace", "unknown")
+                sev = risk.get("severity", "WARNING")
+                msg = risk.get("message", "")
+                log_line = (
+                    f"[AIOPS-ALERT] [STORAGE_RISK] PVC: {pvc} | Namespace: {ns} | "
+                    f"Severidade: {sev} | {msg}"
+                )
+                print(log_line)
+                logger.warning(log_line)
+                loki.push_log(
+                    message=log_line,
+                    level="ERROR" if sev == "CRITICAL" else "WARN",
+                    extra_labels={
+                        "alert_type": "STORAGE_RISK",
+                        "severity": sev,
+                        "target_pvc": pvc,
+                        "target_namespace": ns,
+                    },
+                )
+
+        if http_anomalies:
+            for anom in http_anomalies:
+                svc = anom.get("service", "unknown")
+                ns = anom.get("namespace", "unknown")
+                sev = anom.get("severity", "WARNING")
+                msg = anom.get("message", "")
+                log_line = (
+                    f"[AIOPS-ALERT] [HTTP_ANOMALY] Serviço: {svc} | Namespace: {ns} | "
+                    f"Severidade: {sev} | {msg}"
+                )
+                print(log_line)
+                logger.warning(log_line)
+                loki.push_log(
+                    message=log_line,
+                    level="ERROR" if sev == "CRITICAL" else "WARN",
+                    extra_labels={
+                        "alert_type": "HTTP_ANOMALY",
+                        "severity": sev,
+                        "target_service": svc,
+                        "target_namespace": ns,
+                    },
+                )
+
         insights = []
         for item in mem_risks + storage_risks + http_anomalies:
             rca = reasoner.generate_rca(item, error_logs, events)
@@ -83,12 +163,31 @@ def sync_analysis_cycle():
                 rca["risk_id"] = item.get("id")
                 rca["type"] = item.get("type")
                 insights.append(rca)
-                # Dispatch Slack alert for live detected incidents
+
+                rca_log = (
+                    f"[AIOPS-RCA] Incidente: {rca.get('title')} | "
+                    f"Causa Raiz: {rca.get('probable_root_cause')} | "
+                    f"Ação Recomendada: {rca.get('recommended_action')}"
+                )
+                print(rca_log)
+                logger.info(rca_log)
+                loki.push_log(
+                    message=rca_log,
+                    level="INFO",
+                    extra_labels={
+                        "alert_type": "RCA_DIAGNOSTIC",
+                        "severity": item.get("severity", "WARNING"),
+                    },
+                )
+
+                # Dispatch Slack alert com controle de cooldown
+                alert_key = item.get("id") or f"{item.get('type')}:{item.get('pod') or item.get('service') or item.get('pvc')}"
                 send_slack_alert(
                     title=item.get("type", "Cluster Incident"),
                     message=item.get("message", "Anomalia detectada no cluster."),
                     severity=item.get("severity", "WARNING"),
                     rca=rca,
+                    alert_key=alert_key,
                 )
 
         all_insights = insights + state.get("simulated_insights", [])
@@ -99,8 +198,13 @@ def sync_analysis_cycle():
                     risk.get("severity") == "CRITICAL"
                     and risk.get("estimated_minutes_to_failure", 999) < 15
                 ):
-                    logger.warning(
-                        f"AUTO-HEALING: Automatically remediating {risk.get('id')}"
+                    heal_log = f"AUTO-HEALING: Executando remediação preventiva para {risk.get('id')}"
+                    print(heal_log)
+                    logger.warning(heal_log)
+                    loki.push_log(
+                        message=heal_log,
+                        level="WARN",
+                        extra_labels={"alert_type": "AUTO_HEALING"},
                     )
                     remediator.execute_preventive_action(risk)
 
@@ -115,11 +219,26 @@ def sync_analysis_cycle():
             state["pvcs"] = pvcs_stat
             state["last_update"] = datetime.now(timezone.utc).isoformat()
 
-        logger.info(
-            f"AIOps cycle complete. Health Score: {score}/100, Risks: {len(all_predictions)}, Anomalies: {len(all_anomalies)}"
+        status_log = (
+            f"AIOps cycle complete. Health Score: {score}/100, "
+            f"Risks: {len(all_predictions)}, Anomalies: {len(all_anomalies)}"
+        )
+        print(status_log)
+        logger.info(status_log)
+        loki.push_log(
+            message=status_log,
+            level="INFO",
+            extra_labels={"alert_type": "CYCLE_SUMMARY", "health_score": str(score)},
         )
     except Exception as e:
-        logger.error(f"Error during AIOps analysis cycle: {e}")
+        err_msg = f"Error during AIOps analysis cycle: {e}"
+        print(err_msg)
+        logger.error(err_msg)
+        loki.push_log(
+            message=err_msg,
+            level="ERROR",
+            extra_labels={"alert_type": "ENGINE_ERROR"},
+        )
 
 
 async def run_analysis_cycle():
@@ -203,7 +322,19 @@ class SimulateRequest(BaseModel):
 @app.post("/api/simulate-anomaly")
 def post_simulation(req: SimulateRequest):
     rca = None
+    is_pt = settings.AIOPS_LANGUAGE.lower().startswith("pt")
+
     if req.scenario == "memory_leak":
+        msg = (
+            "Pod donation-service-7f88d se aproximando de OOMKilled! Uso atual: 94.2% do limite, crescendo a 4.2 KB/s."
+            if is_pt
+            else "Pod donation-service approaching OOMKilled! Current: 94.2% of limit, growing at 4.2 KB/s."
+        )
+        rec = (
+            "Agendar rollout restart gracioso ou expandir limite de memória para prevenir OOMKilled."
+            if is_pt
+            else "Schedule graceful rollout restart or expand memory limit to prevent OOMKilled."
+        )
         mock_risk = {
             "id": "oom_leak_donation_ns_donation-service-7f88d",
             "type": "MEMORY_LEAK_PREDICTION",
@@ -211,11 +342,11 @@ def post_simulation(req: SimulateRequest):
             "namespace": "donation-ns",
             "pod": "donation-service-7f88d",
             "container": "donation-service",
-            "message": "Pod donation-service approaching OOMKilled! Current: 94.2% of limit, growing at 4.2 KB/s.",
+            "message": msg,
             "current_usage_mb": 241.2,
             "limit_mb": 256.0,
             "estimated_minutes_to_failure": 14.5,
-            "recommendation": "Schedule graceful rollout restart or expand memory limit to prevent OOMKilled.",
+            "recommendation": rec,
         }
         state["simulated_predictions"] = [mock_risk]
         state["simulated_anomalies"] = []
@@ -230,25 +361,44 @@ def post_simulation(req: SimulateRequest):
         state["insights"] = [rca] if rca else []
         state["current_score"] = 85
 
-        # Enviar alerta para o Slack
+        sim_log = f"[AIOPS-SIMULATION] [MEMORY_LEAK] {mock_risk['message']}"
+        print(sim_log)
+        logger.warning(sim_log)
+        loki.push_log(
+            message=sim_log,
+            level="ERROR",
+            extra_labels={"alert_type": "SIMULATION", "scenario": "memory_leak"},
+        )
+
         send_slack_alert(
             title="Memory Leak Iminente (OOMKill Alert)",
             message=mock_risk["message"],
             severity="CRITICAL",
             rca=rca,
+            force=True,
         )
 
     elif req.scenario == "5xx_surge":
+        msg = (
+            "Serviço donation-service com taxa anômala de erros HTTP de 18.4% (24.2 erros/seg)."
+            if is_pt
+            else "Service donation-service has an anomalous error rate of 18.4% (24.2 errors/sec)."
+        )
+        rec = (
+            "Inspecionar autenticação do Cloud SQL e status de entrega na fila SQS."
+            if is_pt
+            else "Inspect Cloud SQL authentication and SQS delivery status."
+        )
         mock_anom = {
             "id": "err_spike_donation_ns_donation-service",
             "type": "HTTP_5XX_ERROR_RATE_ANOMALY",
             "severity": "CRITICAL",
             "namespace": "donation-ns",
             "service": "donation-service",
-            "message": "Service donation-service has an anomalous error rate of 18.4% (24.2 errors/sec).",
+            "message": msg,
             "current_value": 18.4,
             "unit": "%",
-            "recommendation": "Inspect Cloud SQL authentication and SQS delivery status.",
+            "recommendation": rec,
         }
         state["simulated_anomalies"] = [mock_anom]
         state["simulated_predictions"] = []
@@ -263,12 +413,21 @@ def post_simulation(req: SimulateRequest):
         state["insights"] = [rca] if rca else []
         state["current_score"] = 80
 
-        # Enviar alerta para o Slack
+        sim_log = f"[AIOPS-SIMULATION] [5XX_SURGE] {mock_anom['message']}"
+        print(sim_log)
+        logger.warning(sim_log)
+        loki.push_log(
+            message=sim_log,
+            level="ERROR",
+            extra_labels={"alert_type": "SIMULATION", "scenario": "5xx_surge"},
+        )
+
         send_slack_alert(
             title="Surto de Erros HTTP 5xx Detectado",
             message=mock_anom["message"],
             severity="CRITICAL",
             rca=rca,
+            force=True,
         )
 
     return {
@@ -281,23 +440,45 @@ def post_simulation(req: SimulateRequest):
 
 @app.post("/api/send-test-slack")
 def send_test_slack():
+    is_pt = settings.AIOPS_LANGUAGE.lower().startswith("pt")
     mock_risk = {
         "id": "test_alert_solidary_tech",
         "type": "SIMULATED_TEST_ALERT",
         "severity": "WARNING",
         "namespace": "donation-ns",
         "pod": "donation-service-manual-test",
-        "message": "Teste manual de integridade do webhook de notificações SRE do AIOps Engine.",
+        "message": (
+            "Teste manual de integridade do webhook de notificações SRE do AIOps Engine."
+            if is_pt
+            else "Manual SRE notification webhook health check from AIOps Engine."
+        ),
     }
     rca = {
-        "probable_root_cause": "Validação de conectividade e alertas proativos do canal SRE.",
-        "recommended_action": "Nenhuma ação corretiva necessária. Canal de alertas 100% operacional.",
+        "probable_root_cause": (
+            "Validação de conectividade e alertas proativos do canal SRE."
+            if is_pt
+            else "Validation of SRE channel connectivity and proactive alerts."
+        ),
+        "recommended_action": (
+            "Nenhuma ação corretiva necessária. Canal de alertas 100% operacional."
+            if is_pt
+            else "No remediation needed. Alerting channel is 100% operational."
+        ),
     }
     success = send_slack_alert(
         title="🔔 Teste de Conectividade do AIOps",
         message=mock_risk["message"],
         severity="WARNING",
         rca=rca,
+        force=True,
+    )
+    test_log = "[AIOPS-TEST] Teste de conectividade do webhook do Slack executado."
+    print(test_log)
+    logger.info(test_log)
+    loki.push_log(
+        message=test_log,
+        level="INFO",
+        extra_labels={"alert_type": "MANUAL_TEST"},
     )
     return {
         "slack_delivered": success,

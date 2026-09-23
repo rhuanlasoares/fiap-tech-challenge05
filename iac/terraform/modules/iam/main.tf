@@ -86,3 +86,15 @@ resource "google_project_iam_member" "sa_identity_gke_loki_bucket" {
   role    = "roles/storage.objectUser"
   member  = "serviceAccount:${var.project_id}.svc.id.goog[monitoring-ns/sa-gke]"
 }
+
+resource "google_project_iam_member" "gke_permissions" {
+  project = var.project_id
+  role    = "roles/container.developer"
+  member  = var.sa_wifederation_member
+}
+
+resource "google_project_iam_member" "sql_permissions" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = var.sa_wifederation_member
+}

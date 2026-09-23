@@ -62,17 +62,17 @@ jobs:
           echo "✅ Guardrail validado com sucesso!"
 
       - name: 🔑 Autenticação no GCP via WIF (Zero Static Keys)
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           project_id: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.SERVICE_ACCOUNT || 'sa-wifederation-fiap@naconfeitaria.iam.gserviceaccount.com' }}
 
       - name: ☁️ Configurar Cloud SDK e GKE
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: ☸️ Obter Credenciais do Cluster GKE (se disponível)
-        uses: google-github-actions/get-gke-credentials@v2
+        uses: google-github-actions/get-gke-credentials@v3
         continue-on-error: true
         with:
           cluster_name: gke-samerica

@@ -30,8 +30,9 @@ def setup_telemetry(service_name: str, service_namespace: str):
     # 1. OpenTelemetry Logging (Loki)
     try:
         from opentelemetry._logs import set_logger_provider
-        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import \
-            OTLPLogExporter
+        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
+            OTLPLogExporter,
+        )
         from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
         from opentelemetry.sdk.resources import Resource
@@ -71,11 +72,13 @@ def setup_telemetry(service_name: str, service_namespace: str):
     latency_histogram = None
     try:
         from opentelemetry import metrics
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import \
-            OTLPMetricExporter
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+            OTLPMetricExporter,
+        )
         from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import \
-            PeriodicExportingMetricReader
+        from opentelemetry.sdk.metrics.export import (
+            PeriodicExportingMetricReader,
+        )
         from opentelemetry.sdk.resources import Resource
 
         metric_resource = Resource.create(
@@ -141,6 +144,14 @@ def before_request():
 @app.after_request
 def after_request(response):
     try:
+        # Notifica explicitamente o New Relic sobre status HTTP 5xx
+        if response.status_code >= 500:
+            try:
+                import newrelic.agent
+                newrelic.agent.notice_error()
+            except Exception:
+                pass
+
         start_time = getattr(request, "_start_time", None)
         duration_ms = (time.time() - start_time) * 1000 if start_time else 0.0
         status_str = str(response.status_code)
@@ -253,6 +264,11 @@ def create_ngo():
             if conn:
                 conn.rollback()
             log.error("Erro ao criar ONG: %s", e)
+            try:
+                import newrelic.agent
+                newrelic.agent.notice_error()
+            except Exception:
+                pass
             return jsonify({"error": "Erro interno"}), 500
         finally:
             if conn and not conn.closed:
@@ -269,6 +285,11 @@ def get_ngos():
             return jsonify(cur.fetchall()), 200
     except Exception as e:
         log.error("Erro ao buscar ONGs: %s", e)
+        try:
+            import newrelic.agent
+            newrelic.agent.notice_error()
+        except Exception:
+            pass
         return jsonify({"error": "Erro interno"}), 500
     finally:
         pool.putconn(conn)

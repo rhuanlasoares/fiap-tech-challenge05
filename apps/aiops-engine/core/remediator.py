@@ -1,4 +1,6 @@
-import logging
+﻿import logging
+import threading
+import time
 from typing import Any, Dict, Optional
 
 import requests
@@ -8,16 +10,44 @@ from core.k8s_client import K8sClient
 
 logger = logging.getLogger("aiops.remediator")
 
+_last_alert_timestamps: Dict[str, float] = {}
+_alert_lock = threading.Lock()
+
 
 def send_slack_alert(
     title: str,
     message: str,
     severity: str = "CRITICAL",
     rca: Optional[Dict[str, Any]] = None,
+    alert_key: Optional[str] = None,
+    force: bool = False,
 ) -> bool:
     if not settings.SLACK_WEBHOOK_URL:
         logger.warning("SLACK_WEBHOOK_URL not configured.")
         return False
+
+    # Janela de cooldown para evitar spam repetido no Slack
+    key = alert_key or f"{title}:{rca.get('affected_service') if rca else ''}:{severity}"
+    now = time.time()
+    cooldown = settings.SLACK_ALERT_COOLDOWN_SECONDS
+
+    if not force and cooldown > 0:
+        with _alert_lock:
+            last_sent = _last_alert_timestamps.get(key, 0.0)
+            elapsed = now - last_sent
+            if elapsed < cooldown:
+                remaining = int(cooldown - elapsed)
+                logger.info(
+                    f"Slack alert suprimido para '{key}' devido à janela de cooldown ({remaining}s restantes)."
+                )
+                return False
+            _last_alert_timestamps[key] = now
+            if len(_last_alert_timestamps) > 100:
+                _last_alert_timestamps.clear()
+                _last_alert_timestamps[key] = now
+    elif force:
+        with _alert_lock:
+            _last_alert_timestamps[key] = now
 
     emoji = "🚨" if severity == "CRITICAL" else "⚠️" if severity == "WARNING" else "ℹ️"
 
@@ -73,7 +103,7 @@ def send_slack_alert(
 
     try:
         resp = requests.post(settings.SLACK_WEBHOOK_URL, json=payload, timeout=5)
-        logger.info(f"Slack notification sent (Status: {resp.status_code})")
+        logger.info(f"Slack notification sent for '{key}' (Status: {resp.status_code})")
         return resp.status_code == 200
     except Exception as e:
         logger.warning(f"Failed to deliver Slack webhook alert: {e}")
@@ -108,6 +138,7 @@ class AiOpsRemediator:
                 title=f"Auto-Healing Executado: {deployment_name}",
                 message=f"Vazamento de memória detectado em `{namespace}/{pod}`. Rollout restart disparado com sucesso para evitar OOMKilled.",
                 severity="INFO",
+                force=True,
             )
 
             return {

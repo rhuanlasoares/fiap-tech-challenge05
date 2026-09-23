@@ -1,4 +1,4 @@
-import os
+﻿import os
 
 
 class Settings:
@@ -21,6 +21,10 @@ class Settings:
     )
     ANALYSIS_INTERVAL_SECONDS: int = int(os.getenv("ANALYSIS_INTERVAL_SECONDS", "30"))
     SLACK_WEBHOOK_URL: str = os.getenv("SLACK_WEBHOOK_URL", "")
+    SLACK_ALERT_COOLDOWN_SECONDS: int = int(
+        os.getenv("SLACK_ALERT_COOLDOWN_SECONDS", "300")
+    )
+    AIOPS_LANGUAGE: str = os.getenv("AIOPS_LANGUAGE", "pt-BR")
 
 
 settings = Settings()

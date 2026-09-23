@@ -186,7 +186,6 @@ aws_secret_access_key = {
   secret_data = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 }
 
-
 new_relic_api_key = {
   secret_id   = "sm-new-relic-api-key"
   secret_data = "NRAK-EXAMPLEKEY123456789"

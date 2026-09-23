@@ -7,3 +7,6 @@ venv
 .env
 .git
 .pytest_cache
+*-output.txt
+lint-errors.txt
+*.log

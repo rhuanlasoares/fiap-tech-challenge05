@@ -56,3 +56,8 @@ variable "buckets" {
     labels_bucket = map(string)
   }))
 }
+
+variable "sa_wifederation_member" {
+  type        = string
+  description = "Email of the Service Account used for Workload Identity Federation."
+}
