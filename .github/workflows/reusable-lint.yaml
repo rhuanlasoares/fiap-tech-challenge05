@@ -29,10 +29,12 @@ jobs:
     name: Lint Go (${{ inputs.service_path }})
     runs-on: ubuntu-latest
     steps:
-      # Clona o código do repositório para o runner, permitindo modificações com o token fornecido
+      # Clona o código do repositório garantindo que está na branch correta (sem detached HEAD em PR)
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.TOKEN }}
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       # Prepara o ambiente Go instalando a versão especificada nos inputs
       - name: Setup Go
@@ -65,21 +67,21 @@ jobs:
           git diff --unified=3 ${{ inputs.service_path }} > lint-diff.txt || true
           echo "has_diff=$([ -s lint-diff.txt ] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT  
       
-      # Verifica se houve alterações, faz o commit das correções e envia (push) para a branch main
+      # Verifica se houve alterações, faz o commit das correções e envia (push) para a branch correta
       - name: 💾 Commit and push changes
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          TARGET_BRANCH="${{ github.head_ref || github.ref_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git pull
-          git add ${{ inputs.service_path }}/*
+          git add ${{ inputs.service_path }}
           
           if git diff --staged --quiet; then
             echo "⚠️ No changes to commit"
           else
-            git commit -m "Code linted and formatted by GitHub Actions"
-            git push origin main
-            echo "✅ Changes pushed to repository"
+            git commit -m "style: auto-format ${{ inputs.service_path }} [skip ci]"
+            git push origin "$TARGET_BRANCH"
+            echo "✅ Changes pushed to $TARGET_BRANCH"
           fi
         
           git status
@@ -104,10 +106,12 @@ jobs:
     name: Fix Python (${{ inputs.service_path }})
     runs-on: ubuntu-latest
     steps:
-      # Clona o código do repositório garantindo acesso para futuros commits
+      # Clona o código do repositório garantindo que está na branch correta (sem detached HEAD em PR)
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.TOKEN }}
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       # Prepara o ambiente Python instalando a versão especificada nos inputs
       - name: Setup Python
@@ -149,18 +153,18 @@ jobs:
       # Confere se os formatadores alteraram arquivos, cria o commit automatizado e faz o push
       - name: 💾 Commit and push changes
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          TARGET_BRANCH="${{ github.head_ref || github.ref_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          git pull
-          git add ${{ inputs.service_path }}/*
+          git add ${{ inputs.service_path }}
           
           if git diff --staged --quiet; then
             echo "⚠️ No changes to commit"
           else
-            git commit -m "Code linted and formatted by GitHub Actions"
-            git push origin main
-            echo "✅ Changes pushed to repository"
+            git commit -m "style: auto-format ${{ inputs.service_path }} [skip ci]"
+            git push origin "$TARGET_BRANCH"
+            echo "✅ Changes pushed to $TARGET_BRANCH"
           fi
         
           git status
