@@ -21,4 +21,4 @@ labels:
 images:
 - name: volunteer-service
   newName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-volunteer-sa/volunteer-service
-  newTag: latest
+  newTag: 60dd012379eb62a02fd3fee5406e3311345c6c50
