@@ -97,15 +97,15 @@ module "iam" {
   ]
   source = "./modules/iam"
 
-  project_id     = var.project_id
-  project_number = var.project_number
-  subnets        = var.subnets
-  sa_gke_member  = module.service_accounts.sa_member["sa-gke-fiap"]
-  artreg         = var.artreg
-  sa_inside_gke  = var.sa_inside_gke
-  sa_gke_name    = module.service_accounts.sa_name["sa-gke-fiap"]
-  buckets        = var.buckets
-  sa_wifederation_member              = module.service_accounts.sa_member["sa-wifederation-fiap"]
+  project_id             = var.project_id
+  project_number         = var.project_number
+  subnets                = var.subnets
+  sa_gke_member          = module.service_accounts.sa_member["sa-gke-fiap"]
+  artreg                 = var.artreg
+  sa_inside_gke          = var.sa_inside_gke
+  sa_gke_name            = module.service_accounts.sa_name["sa-gke-fiap"]
+  buckets                = var.buckets
+  sa_wifederation_member = module.service_accounts.sa_member["sa-wifederation-fiap"]
   secrets = {
     aws_access_key_id     = var.aws_access_key_id
     aws_secret_access_key = var.aws_secret_access_key
