@@ -107,7 +107,7 @@ jobs:
     with:
       imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-aiops/aiops-engine
       imageTag: ${{ github.sha }}
-      nameService: aiops-engine
+      nameService: aiops
       region: southamerica-east1
       service_path: apps/aiops-engine
     secrets:
