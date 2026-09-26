@@ -103,7 +103,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-    timeout-minutes: 20
     uses: ./.github/workflows/build-push-gitops.yaml
     with:
       imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-aiops-sa/aiops-engine
