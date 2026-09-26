@@ -66,3 +66,10 @@ Thumbs.db
 *README_planejamento*
 README_planejamento.md
 docs/README_planejamento.md\n
+# Temporary Lint and Security Scanner Outputs
+*flake8-output.txt
+*pylint-output.txt
+*lint-errors.txt
+*lint-diff.txt
+golangci-lint-output.txt
+issue-*.md

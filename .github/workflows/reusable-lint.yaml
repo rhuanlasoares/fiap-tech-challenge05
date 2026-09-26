@@ -72,12 +72,12 @@ jobs:
           git config user.email "actions@github.com"
 
           git pull
-          git add ${{ inputs.service_path }}/*
+          git add -u ${{ inputs.service_path }}
           
           if git diff --staged --quiet; then
             echo "⚠️ No changes to commit"
           else
-            git commit -m "Code linted and formatted by GitHub Actions"
+            git commit -m "style(go): code formatted by GitHub Actions [skip ci]"
             git push origin main
             echo "✅ Changes pushed to repository"
           fi
@@ -153,12 +153,12 @@ jobs:
           git config user.email "actions@github.com"
           
           git pull
-          git add ${{ inputs.service_path }}/*
+          git add -u ${{ inputs.service_path }}
           
           if git diff --staged --quiet; then
             echo "⚠️ No changes to commit"
           else
-            git commit -m "Code linted and formatted by GitHub Actions"
+            git commit -m "style(python): code formatted by GitHub Actions [skip ci]"
             git push origin main
             echo "✅ Changes pushed to repository"
           fi
@@ -179,3 +179,13 @@ jobs:
           gemini-api-key: "${{ secrets.GEMINI_API_KEY }}"
           github-token: "${{ secrets.TOKEN }}"
           output-file: "issue-lint-python.md"
+
+      # Limpa relatórios temporários de lint para evitar arquivos residuais
+      - name: 🧹 Cleanup temporary reports
+        if: always()
+        run: |
+          rm -f ${{ inputs.service_path }}/flake8-output.txt \
+                ${{ inputs.service_path }}/pylint-output.txt \
+                ${{ inputs.service_path }}/lint-errors.txt \
+                lint-diff.txt issue-lint-python.md || true
+
