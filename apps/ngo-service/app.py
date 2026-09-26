@@ -118,6 +118,37 @@ def setup_telemetry(service_name: str, service_namespace: str):
     except Exception as exc:
         root_logger.warning("Falha ao inicializar OpenTelemetry metrics: %s", exc)
 
+    # 3. OpenTelemetry Tracing (Traces & Server Spans para New Relic APM via OTel Collector)
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        trace_resource = Resource.create(
+            {
+                "service.name": os.getenv("OTEL_SERVICE_NAME", service_name),
+                "service.namespace": service_namespace,
+                "deployment.environment": os.getenv("ENVIRONMENT", "production"),
+                "pod": pod_name,
+                "k8s.pod.name": pod_name,
+            }
+        )
+
+        span_exporter = OTLPSpanExporter(endpoint=otel_endpoint, insecure=insecure)
+        tracer_provider = TracerProvider(resource=trace_resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(span_exporter))
+        trace.set_tracer_provider(tracer_provider)
+        root_logger.info(
+            "OpenTelemetry tracing inicializado para %s -> %s",
+            service_name,
+            otel_endpoint,
+        )
+    except Exception as exc:
+        root_logger.warning("Falha ao inicializar OpenTelemetry tracing: %s", exc)
+
     return root_logger, requests_counter, latency_histogram
 
 
@@ -134,6 +165,20 @@ except Exception as nr_err:
 log, requests_counter, latency_histogram = setup_telemetry("ngo-service", "ngo-ns")
 
 app = Flask(__name__)
+
+# Auto-instrumentação OpenTelemetry para Flask e Requests (Gera Server Spans para o New Relic APM)
+try:
+    from opentelemetry.instrumentation.flask import FlaskInstrumentor
+    FlaskInstrumentor().instrument_app(app)
+except Exception as exc:
+    log.warning("Falha ao instrumentar Flask com OpenTelemetry: %s", exc)
+
+try:
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    RequestsInstrumentor().instrument()
+except Exception as exc:
+    log.warning("Falha ao instrumentar Requests com OpenTelemetry: %s", exc)
+
 
 
 @app.before_request

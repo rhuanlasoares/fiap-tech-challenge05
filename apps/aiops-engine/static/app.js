@@ -123,6 +123,8 @@ async function triggerAnalysis() {
     const res = await fetch('/api/analyze-now', { method: 'POST' });
     if (res.ok) {
       await fetchStatus();
+runConnectivityTest();
+fetchPostMortems();
     }
   } finally {
     icon.textContent = '⚡';
@@ -138,6 +140,8 @@ async function simulate(scenario) {
     });
     if (res.ok) {
       await fetchStatus();
+runConnectivityTest();
+fetchPostMortems();
     }
   } catch (err) {
     console.error('Simulation error:', err);
@@ -168,6 +172,8 @@ async function remediateRisk(riskId) {
     if (res.ok) {
       alert('Ação de Auto-Remediação executada com sucesso!');
       await fetchStatus();
+runConnectivityTest();
+fetchPostMortems();
     }
   } catch (err) {
     alert('Erro ao executar remediação: ' + err);
@@ -175,4 +181,106 @@ async function remediateRisk(riskId) {
 }
 
 fetchStatus();
+runConnectivityTest();
+fetchPostMortems();
 setInterval(fetchStatus, 3000);
+setInterval(fetchPostMortems, 5000);
+// Connectivity Test Functions
+async function runConnectivityTest() {
+  const icon = document.getElementById('test-conn-icon');
+  if (icon) icon.textContent = '⏳';
+  try {
+    const res = await fetch('/api/connectivity-test');
+    if (res.ok) {
+      const data = await res.json();
+      updateConnectivityBadges(data);
+    }
+  } catch (err) {
+    console.error('Error testing connectivity:', err);
+  } finally {
+    if (icon) icon.textContent = '⚡';
+  }
+}
+
+function updateConnectivityBadges(diag) {
+  if (!diag) return;
+
+  function setBadge(id, svcName, info) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = 'badge-conn ' + (info.status || 'unknown');
+    const val = el.querySelector('.badge-val');
+    if (val) {
+      if (info.status === 'healthy') {
+        val.textContent = 'Online (' + (info.latency_ms || 0) + 'ms)';
+      } else if (info.status === 'disabled') {
+        val.textContent = 'Fallback Ativo';
+      } else if (info.status === 'not_configured') {
+        val.textContent = 'Não configurado';
+      } else {
+        val.textContent = 'Falha (' + (info.latency_ms || 0) + 'ms)';
+      }
+    }
+    el.title = info.message || '';
+  }
+
+  if (diag.loki) setBadge('badge-loki', 'Loki', diag.loki);
+  if (diag.prometheus) setBadge('badge-prom', 'Prometheus', diag.prometheus);
+  if (diag.kubernetes) setBadge('badge-k8s', 'Kubernetes', diag.kubernetes);
+  if (diag.gemini) setBadge('badge-gemini', 'Gemini', diag.gemini);
+  if (diag.slack) setBadge('badge-slack', 'Slack', diag.slack);
+}
+
+async function fetchPostMortems() {
+  try {
+    const res = await fetch('/api/post-mortems');
+    if (res.ok) {
+      const pms = await res.json();
+      renderPostMortems(pms);
+    }
+  } catch (err) {
+    console.error('Error loading post-mortems:', err);
+  }
+}
+
+function renderPostMortems(pms) {
+  const listEl = document.getElementById('postmortems-list');
+  const badgeEl = document.getElementById('pm-badge');
+  if (!listEl) return;
+
+  if (badgeEl) badgeEl.textContent = pms.length + ' Relatórios';
+
+  if (!pms || pms.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">Nenhum Post-Mortem registrado. Quando o cluster atinge Health Score >= 95 após um incidente, o relatório completo sintetizado pelo Google Gemini é publicado aqui e enviado ao Slack.</div>';
+    return;
+  }
+
+  listEl.innerHTML = pms.map(function(pm) {
+    const actions = (pm.action_items || []).map(function(a) { return '<li>' + a + '</li>'; }).join('');
+    return '<div class="pm-box">' +
+      '<div class="pm-header">' +
+        '<div class="pm-title">📋 ' + (pm.title || 'Post-Mortem Oficial') + '</div>' +
+        '<div class="pm-meta">' +
+          '<span class="pm-tag">✅ ' + (pm.status || 'RESOLVED') + '</span>' +
+          '<span class="pm-tag">⏱️ MTTR: ' + (pm.mttr_formatted || pm.mttr_minutes + 'm') + '</span>' +
+          '<span class="pm-tag">🎯 Score: ' + (pm.final_score || 100) + '/100</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pm-summary">' + (pm.executive_summary || '') + '</div>' +
+      '<div class="pm-grid">' +
+        '<div class="pm-block">' +
+          '<h4>🔍 Causa Raiz Técnica (Gemini AI)</h4>' +
+          '<p>' + (pm.root_cause_analysis || 'N/A') + '</p>' +
+        '</div>' +
+        '<div class="pm-block">' +
+          '<h4>🛠️ Remediação que Estabilizou o Cluster</h4>' +
+          '<p>' + (pm.remediation_details || 'N/A') + '</p>' +
+        '</div>' +
+      '</div>' +
+      (actions ? '<div class="pm-block pm-actions" style="margin-top:6px;">' +
+        '<h4>🛡️ Ações Preventivas (Action Items)</h4>' +
+        '<ul>' + actions + '</ul>' +
+      '</div>' : '') +
+    '</div>';
+  }).join('');
+}

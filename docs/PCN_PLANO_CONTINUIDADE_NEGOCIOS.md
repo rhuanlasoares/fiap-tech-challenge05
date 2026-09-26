@@ -92,10 +92,23 @@ resource "google_sql_database_instance" "replica" {
 Durante qualquer janela de corte (*cutover*), congelamento de banco para exportação ou chaveamento de proxy, novas requisições continuam chegando dos doadores e parceiros:
 
 ### 5.1. `donation-service` (Go) — Fallback para AWS SQS + Auto-Drain Worker
-* **Interceptação de Read-Only**: O serviço detecta códigos de erro PostgreSQL `57014`, `25006` ou perda transitória de socket.
-* **Buffer Durável em SQS**: A doação é serializada e gravada na fila durável **AWS SQS** com status `PENDING_BUFFERED`. O endpoint responde imediatamente `HTTP 202 Accepted` ao doador com o ID da doação gerado.
-* **Auto-Drain Worker**: A goroutine `startSQSBufferDrainWorker(ctx)` roda em background. Assim que a conexão de escrita com o banco primário volta ao normal, o worker drena automaticamente todas as doações represadas no SQS e as grava no PostgreSQL com idempotência.
-* **RPO**: **Rigorosamente 0 segundos**.
+
+Quando o Cloud SQL Master sofre indisponibilidade (queda zonal, failover primário/réplica, throttling severo ou comutação para *read-only*), o microsserviço ativa proteção contra perda de dados sem interromper a jornada do doador:
+
+```text
+       POST /donations
+Doador ───────────────> [donation-service (Go)] ──(Falha no SQL)──> [AWS SQS (Queue)]
+       <── 202 Accepted ──────┘                                            │
+                                                                           │ (Health Ping OK a cada 10s)
+                                                                           ▼
+                               [PostgreSQL / Cloud SQL] <── Auto-Drain Worker
+                               (Commit com Sucesso) ────> Deleta mensagem SQS (RPO = 0)
+```
+
+* **Interceptação de Falhas e Read-Only (`apps/donation-service/main.go:L251-280`)**: O serviço intercepta falhas de rede, timeouts e códigos de erro de banco (ex: `57014`, `25006`).
+* **Buffer Durável Multi-AZ em SQS**: Em vez de retornar HTTP 500, a doação é marcada como `PENDING_BUFFERED` e enviada à fila durável **AWS SQS** via `a.sendNotificationEvent()`. O doador recebe instantaneamente `HTTP 202 Accepted` com `status: QUEUED_FOR_PROCESSING` e o `donation.id`.
+* **Worker de Drenagem Contínua (`apps/donation-service/main.go:L434-491`)**: A goroutine `startSQSBufferDrainWorker(ctx)` roda em loop infinito com ticker de 10s. Executa `a.DB.PingContext(ctx)`. Quando o PostgreSQL normaliza, consome mensagens (`ReceiveMessageWithContext`), persiste via SQL `INSERT` com status `APPROVED` e, **somente após a confirmação do commit**, executa `DeleteMessageWithContext` no SQS.
+* **RPO Garantido**: **Rigorosamente 0 segundos (Zero Data Loss)**, pois nenhuma mensagem é removida do SQS até que a persistência relacional esteja concluída.
 
 ### 5.2. `ngo-service` (Python) — Exponential Backoff + Retries
 * **Tratamento de Exceções**: O código captura `psycopg2.errors.ReadOnlySqlTransaction` e `psycopg2.OperationalError`.

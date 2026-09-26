@@ -48,8 +48,8 @@ forecasting:
 aggregator:
   resources:
     requests:
-      cpu: 714m
-      memory: 503Mi
+      cpu: 50m
+      memory: 512Mi
     limits:
       cpu: 1500m
       memory: 1Gi

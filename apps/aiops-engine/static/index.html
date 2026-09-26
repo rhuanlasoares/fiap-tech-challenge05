@@ -28,6 +28,33 @@
     </header>
 
     <!-- Top KPI Grid -->
+        <!-- Telemetry Integrations & Connectivity Bar -->
+    <section class="connectivity-bar">
+      <div class="connectivity-header">
+        <span class="connectivity-title">🛰️ Conectividade de Telemetria (Pre-Flight Checks):</span>
+        <button id="test-connectivity-btn" class="btn btn-outline btn-sm" onclick="runConnectivityTest()">
+          <span id="test-conn-icon">⚡</span> Testar Conectividade Agora
+        </button>
+      </div>
+      <div class="connectivity-badges">
+        <div id="badge-loki" class="badge-conn">
+          <span class="badge-dot"></span> Loki Log Stream: <span class="badge-val">Verificando...</span>
+        </div>
+        <div id="badge-prom" class="badge-conn">
+          <span class="badge-dot"></span> Prometheus Metrics: <span class="badge-val">Verificando...</span>
+        </div>
+        <div id="badge-k8s" class="badge-conn">
+          <span class="badge-dot"></span> K8s API Server: <span class="badge-val">Verificando...</span>
+        </div>
+        <div id="badge-gemini" class="badge-conn">
+          <span class="badge-dot"></span> Google Gemini AI: <span class="badge-val">Verificando...</span>
+        </div>
+        <div id="badge-slack" class="badge-conn">
+          <span class="badge-dot"></span> Slack Webhook: <span class="badge-val">Verificando...</span>
+        </div>
+      </div>
+    </section>
+
     <section class="kpi-grid">
       <div class="card kpi-card score-card">
         <div class="kpi-content">
@@ -136,6 +163,17 @@
         </div>
       </div>
     </main>
+
+        <!-- Post-Mortem SRE Section -->
+    <section class="card section-card postmortem-section">
+      <div class="section-header">
+        <h2>📑 Relatórios Oficiais de Post-Mortem (SRE Governance)</h2>
+        <span id="pm-badge" class="badge badge-ai">0 Relatórios</span>
+      </div>
+      <div id="postmortems-list" class="cards-list">
+        <div class="empty-state">Nenhum Post-Mortem registrado. Quando o cluster atinge Health Score >= 95 após um incidente, o relatório completo sintetizado pelo Google Gemini é publicado aqui e enviado ao Slack.</div>
+      </div>
+    </section>
 
     <footer>
       SolidaryTech Platform — FIAP Tech Challenge 05 • GKE Multi-Cloud • AIOps Self-Healing Engine

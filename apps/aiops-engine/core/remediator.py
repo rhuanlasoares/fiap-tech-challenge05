@@ -157,3 +157,73 @@ class AiOpsRemediator:
             "action": "NONE",
             "message": "No automated remediation handler defined for this risk type.",
         }
+
+def send_slack_post_mortem(
+    post_mortem: Dict[str, Any],
+    force: bool = True,
+) -> bool:
+    """Envia o card oficial de Post-Mortem gerado com Slack Block Kit."""
+    if not settings.SLACK_WEBHOOK_URL:
+        logger.warning("SLACK_WEBHOOK_URL not configured for Post-Mortem.")
+        return False
+
+    title = post_mortem.get("title", "Relatório Oficial de Post-Mortem SRE")
+    status = post_mortem.get("status", "RESOLVED")
+    mttr = post_mortem.get("mttr_formatted") or f"{post_mortem.get("mttr_minutes", 0)} min"
+    score = post_mortem.get("final_score", 100)
+    summary = post_mortem.get("executive_summary", "")
+    rca = post_mortem.get("root_cause_analysis", "")
+    rem = post_mortem.get("remediation_details", "")
+    action_items = post_mortem.get("action_items", [])
+
+    text = f"📋 *[AIOps SRE Post-Mortem]* {title}\n>Status: {status} | MTTR: {mttr} | Health Score: {score}/100"
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"📋 SRE Incident Post-Mortem: {status}",
+            },
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Status do Incidente:*\n`✅ {status}`"},
+                {"type": "mrkdwn", "text": f"*Duração (MTTR):*\n`⏱️ {mttr}`"},
+                {"type": "mrkdwn", "text": f"*Health Score Final:*\n`🎯 {score}/100`"},
+                {"type": "mrkdwn", "text": "*Cluster / Engine:*\n`gke-samerica / AIOps`"},
+            ],
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*📋 Resumo Executivo:*\n{summary}"},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*🔍 Causa Raiz Técnica (Google Gemini GenAI):*\n{rca}"},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*🛠️ Remediação que Estabilizou o Cluster:*\n```{rem}```"},
+        },
+    ]
+
+    if action_items:
+        items_str = "\n".join([f"• {item}" if not item.startswith("•") and not item[0].isdigit() else item for item in action_items])
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*🛡️ Ações Preventivas (Action Items):*\n{items_str}"},
+            }
+        )
+
+    payload = {"text": text, "blocks": blocks}
+
+    try:
+        resp = requests.post(settings.SLACK_WEBHOOK_URL, json=payload, timeout=5)
+        logger.info(f"Slack Post-Mortem notification sent (Status: {resp.status_code})")
+        return resp.status_code == 200
+    except Exception as e:
+        logger.warning(f"Failed to deliver Slack Post-Mortem: {e}")
+        return False

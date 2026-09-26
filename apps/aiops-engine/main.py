@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import os
 import threading
@@ -18,7 +18,7 @@ from core.k8s_client import K8sClient
 from core.loki_client import LokiClient, LokiLoggingHandler
 from core.predictor import AiOpsPredictor
 from core.prometheus_client import PrometheusClient
-from core.remediator import AiOpsRemediator, send_slack_alert
+from core.remediator import AiOpsRemediator, send_slack_alert, send_slack_post_mortem
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -32,7 +32,7 @@ predictor = AiOpsPredictor()
 reasoner = AasReasoner()
 remediator = AiOpsRemediator(k8s)
 
-# Conecta handler do Loki para encaminhamento automatico de logs ao Grafana
+# Conecta handler do Loki para encaminhamento autom?tico de logs ao Grafana
 loki_handler = LokiLoggingHandler(loki)
 loki_handler.setLevel(logging.INFO)
 loki_handler.setFormatter(
@@ -55,7 +55,44 @@ state = {
     "nodes": [],
     "pvcs": [],
     "last_update": "",
+    "active_incident": None,
+    "post_mortems": [],
+    "integrations": {},
 }
+
+
+def check_all_telemetry_connectivity() -> Dict[str, Any]:
+    """Auditoria e teste de conectividade de todos os subsistemas de telemetria."""
+    loki_res = loki.check_connectivity(settings.TARGET_NAMESPACES)
+    prom_res = prom.check_connectivity()
+    k8s_res = k8s.check_connectivity()
+    gemini_res = reasoner.check_connectivity()
+    slack_configured = bool(settings.SLACK_WEBHOOK_URL)
+
+    # Telemetria ? considerada operacional se ao menos um dos backends responder ou se estiver em modo simulado
+    overall_ready = (
+        loki_res["status"] == "healthy"
+        or prom_res["status"] == "healthy"
+        or k8s_res["status"] == "healthy"
+    )
+
+    return {
+        "overall_status": "healthy" if overall_ready else "unhealthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "loki": loki_res,
+        "prometheus": prom_res,
+        "kubernetes": k8s_res,
+        "gemini": gemini_res,
+        "slack": {
+            "configured": slack_configured,
+            "status": "healthy" if slack_configured else "not_configured",
+            "message": (
+                "Slack webhook URL configurada e pronta para alertas."
+                if slack_configured
+                else "SLACK_WEBHOOK_URL não configurada."
+            ),
+        },
+    }
 
 
 def sync_analysis_cycle():
@@ -85,7 +122,7 @@ def sync_analysis_cycle():
             all_predictions, all_anomalies, events
         )
 
-        # Emissao de prints e encaminhamento estruturado ao Loki / Grafana
+        # Emissão de logs estruturados e alertas
         if mem_risks:
             for risk in mem_risks:
                 pod = risk.get("pod", "unknown")
@@ -180,7 +217,6 @@ def sync_analysis_cycle():
                     },
                 )
 
-                # Dispatch Slack alert com controle de cooldown
                 alert_key = item.get("id") or f"{item.get('type')}:{item.get('pod') or item.get('service') or item.get('pvc')}"
                 send_slack_alert(
                     title=item.get("type", "Cluster Incident"),
@@ -192,6 +228,8 @@ def sync_analysis_cycle():
 
         all_insights = insights + state.get("simulated_insights", [])
 
+        # Auto-Healing
+        executed_remediations = []
         if settings.AUTO_HEALING_ENABLED:
             for risk in mem_risks:
                 if (
@@ -206,9 +244,73 @@ def sync_analysis_cycle():
                         level="WARN",
                         extra_labels={"alert_type": "AUTO_HEALING"},
                     )
-                    remediator.execute_preventive_action(risk)
+                    rem_res = remediator.execute_preventive_action(risk)
+                    executed_remediations.append(rem_res)
 
+        # MÁQUINA DE ESTADOS DO INCIDENTE & GERAÇÃO DE POST-MORTEM
         with state_lock:
+            # 1. Se score < 90 ou há anomalias/riscos: abre ou atualiza contexto do incidente ativo
+            if score < 90 or all_predictions or all_anomalies:
+                if state["active_incident"] is None:
+                    state["active_incident"] = {
+                        "id": f"inc-{int(time.time())}",
+                        "started_at": datetime.now(timezone.utc).isoformat(),
+                        "start_timestamp": time.time(),
+                        "initial_score": score,
+                        "lowest_score": score,
+                        "predictions": list(all_predictions),
+                        "anomalies": list(all_anomalies),
+                        "insights": list(all_insights),
+                        "remediations": list(executed_remediations),
+                        "error_logs_sample": [l.get("log") for l in error_logs[:5]],
+                    }
+                    logger.info(
+                        f"🚨 Incidente operacional aberto em memória: {state['active_incident']['id']} (Score: {score})"
+                    )
+                else:
+                    state["active_incident"]["lowest_score"] = min(
+                        state["active_incident"]["lowest_score"], score
+                    )
+                    state["active_incident"]["predictions"] = list(all_predictions)
+                    state["active_incident"]["anomalies"] = list(all_anomalies)
+                    state["active_incident"]["insights"] = list(all_insights)
+                    if executed_remediations:
+                        state["active_incident"]["remediations"].extend(executed_remediations)
+
+            # 2. Se score recuperou para >= 95 E havia um incidente ativo: CLUSTER ESTABILIZADO!
+            elif score >= 95 and state["active_incident"] is not None:
+                inc = state["active_incident"]
+                inc["resolved_at"] = datetime.now(timezone.utc).isoformat()
+                duration = round(time.time() - inc.get("start_timestamp", time.time()), 1)
+                inc["duration_seconds"] = duration
+                inc["final_score"] = score
+
+                logger.info(
+                    f"✅ Cluster estabilizado com Health Score {score}/100! "
+                    f"Sintetizando Post-Mortem via Google Gemini (MTTR: {duration}s)..."
+                )
+
+                pm = reasoner.generate_post_mortem(inc)
+                send_slack_post_mortem(pm)
+
+                state["post_mortems"].insert(0, pm)
+                if len(state["post_mortems"]) > 20:
+                    state["post_mortems"].pop()
+
+                post_mortem_log = (
+                    f"[AIOPS-POST-MORTEM] Incidente {inc['id']} resolvido com sucesso! "
+                    f"MTTR: {pm.get('mttr_formatted')} | Score: {score}/100"
+                )
+                print(post_mortem_log)
+                logger.info(post_mortem_log)
+                loki.push_log(
+                    message=post_mortem_log,
+                    level="INFO",
+                    extra_labels={"alert_type": "POST_MORTEM", "mttr": str(duration)},
+                )
+
+                state["active_incident"] = None
+
             state["current_score"] = score
             state["predictions"] = all_predictions
             state["anomalies"] = all_anomalies
@@ -257,12 +359,27 @@ async def background_monitor():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Pre-Flight Self-Check no startup do container
+    logger.info("Executando Pre-Flight Connectivity Check do AIOps Engine...")
+    print("=" * 72)
+    print("🔍 [AIOPS-STARTUP] EXECUTANDO PRE-FLIGHT CHECK DE CONECTIVIDADE SRE")
+    print("=" * 72)
+    diag = check_all_telemetry_connectivity()
+    state["integrations"] = diag
+
+    print(f"  ✅ Grafana Loki:       [{diag['loki']['status'].upper()}] - {diag['loki']['message']}")
+    print(f"  ✅ Prometheus:         [{diag['prometheus']['status'].upper()}] - {diag['prometheus']['message']}")
+    print(f"  ✅ Kubernetes API:     [{diag['kubernetes']['status'].upper()}] - {diag['kubernetes']['message']}")
+    print(f"  ✅ Google Gemini GenAI:[{diag['gemini']['status'].upper()}] - {diag['gemini']['message']}")
+    print(f"  ✅ Slack Alerts:       [{diag['slack']['status'].upper()}] - {diag['slack']['message']}")
+    print("=" * 72)
+
     task = asyncio.create_task(background_monitor())
     yield
     task.cancel()
 
 
-app = FastAPI(title="AIOps Predictive Engine", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="AIOps Predictive Engine", version="1.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -273,8 +390,43 @@ app.add_middleware(
 )
 
 
+@app.get("/live")
+def liveness_check():
+    """Liveness probe do Kubernetes: rápido, valida apenas se o processo Python está vivo."""
+    return {
+        "status": "alive",
+        "service": "aiops-engine",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/ready")
+def readiness_check():
+    """Readiness probe do Kubernetes: valida se as dependências essenciais de telemetria respondem."""
+    diag = check_all_telemetry_connectivity()
+    state["integrations"] = diag
+
+    # Em ambiente de produção, se nenhuma dependência responder, responde 503
+    if diag["overall_status"] != "healthy":
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "message": "Dependências vitais de telemetria inacessíveis.",
+                "diagnostics": diag,
+            },
+        )
+    return {
+        "status": "ready",
+        "service": "aiops-engine",
+        "score": state["current_score"],
+        "diagnostics": diag,
+    }
+
+
 @app.get("/health")
 def health_check():
+    """Health check padrão mantido para compatibilidade com o GKE Application Load Balancer."""
     return {
         "status": "healthy",
         "service": "aiops-engine",
@@ -292,6 +444,20 @@ def pre_stop():
 @app.get("/api/status")
 def get_status():
     return state
+
+
+@app.get("/api/connectivity-test")
+def get_connectivity_test():
+    """Auditoria e teste de conectividade manual de todos os subsistemas de telemetria."""
+    diag = check_all_telemetry_connectivity()
+    state["integrations"] = diag
+    return diag
+
+
+@app.get("/api/post-mortems")
+def get_post_mortems():
+    """Retorna o histórico de relatórios formais de Post-Mortem SRE gerados."""
+    return state.get("post_mortems", [])
 
 
 @app.get("/api/predictions")
@@ -361,6 +527,20 @@ def post_simulation(req: SimulateRequest):
         state["insights"] = [rca] if rca else []
         state["current_score"] = 85
 
+        # Abre incidente ativo na máquina de estados
+        state["active_incident"] = {
+            "id": f"sim-inc-oom-{int(time.time())}",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "start_timestamp": time.time(),
+            "initial_score": 85,
+            "lowest_score": 85,
+            "predictions": [mock_risk],
+            "anomalies": [],
+            "insights": [rca] if rca else [],
+            "remediations": [],
+            "error_logs_sample": [mock_risk["message"]],
+        }
+
         sim_log = f"[AIOPS-SIMULATION] [MEMORY_LEAK] {mock_risk['message']}"
         print(sim_log)
         logger.warning(sim_log)
@@ -412,6 +592,20 @@ def post_simulation(req: SimulateRequest):
         state["simulated_insights"] = [rca] if rca else []
         state["insights"] = [rca] if rca else []
         state["current_score"] = 80
+
+        # Abre incidente ativo na máquina de estados
+        state["active_incident"] = {
+            "id": f"sim-inc-5xx-{int(time.time())}",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "start_timestamp": time.time(),
+            "initial_score": 80,
+            "lowest_score": 80,
+            "predictions": [],
+            "anomalies": [mock_anom],
+            "insights": [rca] if rca else [],
+            "remediations": [],
+            "error_logs_sample": [mock_anom["message"]],
+        }
 
         sim_log = f"[AIOPS-SIMULATION] [5XX_SURGE] {mock_anom['message']}"
         print(sim_log)
@@ -466,7 +660,7 @@ def send_test_slack():
         ),
     }
     success = send_slack_alert(
-        title="🔔 Teste de Conectividade do AIOps",
+        title="🛰️ Teste de Conectividade do AIOps",
         message=mock_risk["message"],
         severity="WARNING",
         rca=rca,
@@ -488,35 +682,75 @@ def send_test_slack():
 
 @app.post("/api/remediate/{risk_id}")
 def remediate_risk(risk_id: str):
+    matched_risk = None
     for r in state["predictions"] + state["anomalies"]:
         if r.get("id") == risk_id:
-            res = remediator.execute_preventive_action(r)
-            state["predictions"] = [
-                p for p in state["predictions"] if p.get("id") != risk_id
-            ]
-            state["anomalies"] = [
-                a for a in state["anomalies"] if a.get("id") != risk_id
-            ]
-            state["simulated_predictions"] = [
-                p
-                for p in state.get("simulated_predictions", [])
-                if p.get("id") != risk_id
-            ]
-            state["simulated_anomalies"] = [
-                a
-                for a in state.get("simulated_anomalies", [])
-                if a.get("id") != risk_id
-            ]
-            state["simulated_insights"] = [
-                i
-                for i in state.get("simulated_insights", [])
-                if i.get("risk_id") != risk_id
-            ]
-            state["insights"] = [
-                i for i in state["insights"] if i.get("risk_id") != risk_id
-            ]
-            state["current_score"] = min(100, state["current_score"] + 15)
-            return {"status": "remediated", "details": res}
+            matched_risk = r
+            break
+
+    if matched_risk:
+        res = remediator.execute_preventive_action(matched_risk)
+
+        # Atualiza lista de riscos
+        state["predictions"] = [
+            p for p in state["predictions"] if p.get("id") != risk_id
+        ]
+        state["anomalies"] = [
+            a for a in state["anomalies"] if a.get("id") != risk_id
+        ]
+        state["simulated_predictions"] = [
+            p
+            for p in state.get("simulated_predictions", [])
+            if p.get("id") != risk_id
+        ]
+        state["simulated_anomalies"] = [
+            a
+            for a in state.get("simulated_anomalies", [])
+            if a.get("id") != risk_id
+        ]
+        state["simulated_insights"] = [
+            i
+            for i in state.get("simulated_insights", [])
+            if i.get("risk_id") != risk_id
+        ]
+        state["insights"] = [
+            i for i in state["insights"] if i.get("risk_id") != risk_id
+        ]
+
+        state["current_score"] = min(100, state["current_score"] + 15)
+
+        # Grava remediação no incidente ativo
+        if state["active_incident"] is not None:
+            state["active_incident"]["remediations"].append(res)
+
+        # Se atingiu >= 95, normalizou! Gera o Post-Mortem imediatamente!
+        post_mortem_generated = None
+        if state["current_score"] >= 95 and state["active_incident"] is not None:
+            inc = state["active_incident"]
+            inc["resolved_at"] = datetime.now(timezone.utc).isoformat()
+            duration = round(time.time() - inc.get("start_timestamp", time.time()), 1)
+            inc["duration_seconds"] = duration
+            inc["final_score"] = state["current_score"]
+
+            logger.info(
+                f"Cluster normalizado após remediação manual! Gerando Post-Mortem SRE..."
+            )
+            post_mortem_generated = reasoner.generate_post_mortem(inc)
+            send_slack_post_mortem(post_mortem_generated)
+
+            state["post_mortems"].insert(0, post_mortem_generated)
+            if len(state["post_mortems"]) > 20:
+                state["post_mortems"].pop()
+
+            state["active_incident"] = None
+
+        return {
+            "status": "remediated",
+            "score": state["current_score"],
+            "details": res,
+            "post_mortem": post_mortem_generated,
+        }
+
     raise HTTPException(status_code=404, detail="Risk ID not found")
 
 

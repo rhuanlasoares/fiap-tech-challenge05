@@ -24,9 +24,13 @@ class K8sClient:
             except Exception:
                 config.load_kube_config()
                 logger.info("Loaded local kube-config")
-            self.core_api = client.CoreV1Api()
-            self.apps_api = client.AppsV1Api()
-            self.custom_api = client.CustomObjectsApi()
+            # Configura cliente sem retentativas infinitas para conexões remotas
+            conf = client.Configuration.get_default_copy()
+            conf.retries = 0
+            api_client = client.ApiClient(configuration=conf)
+            self.core_api = client.CoreV1Api(api_client=api_client)
+            self.apps_api = client.AppsV1Api(api_client=api_client)
+            self.custom_api = client.CustomObjectsApi(api_client=api_client)
         except Exception as e:
             logger.warning(f"Kubernetes client initialization failed: {e}")
 
@@ -139,3 +143,28 @@ class K8sClient:
                 )
 
         return False
+
+    def check_connectivity(self) -> Dict[str, Any]:
+        """Testa se a API do Kubernetes está acessível e se possui permissão de leitura."""
+        import time
+
+        t0 = time.time()
+        res: Dict[str, Any] = {
+            "status": "unhealthy",
+            "latency_ms": 0.0,
+            "can_access_api": False,
+            "message": "",
+        }
+        if not self.core_api:
+            res["message"] = "Kubernetes client não inicializado (fora do cluster ou sem kube-config)."
+            return res
+        try:
+            ns_list = self.core_api.list_namespace(limit=1, _request_timeout=3)
+            res["latency_ms"] = round((time.time() - t0) * 1000, 2)
+            res["status"] = "healthy"
+            res["can_access_api"] = True
+            res["message"] = f"K8s API Server 100% operacional ({res['latency_ms']}ms)."
+        except Exception as e:
+            res["latency_ms"] = round((time.time() - t0) * 1000, 2)
+            res["message"] = f"Falha ao consultar K8s API Server: {e}"
+        return res

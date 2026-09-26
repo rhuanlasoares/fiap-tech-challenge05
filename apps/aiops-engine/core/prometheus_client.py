@@ -285,3 +285,34 @@ class PrometheusClient:
                 }
 
         return list(nodes.values())
+
+    def check_connectivity(self) -> Dict[str, Any]:
+        """Testa se a API do Prometheus está acessível e se consultas PromQL funcionam."""
+        import time
+
+        t0 = time.time()
+        res: Dict[str, Any] = {
+            "status": "unhealthy",
+            "url": self.base_url,
+            "latency_ms": 0.0,
+            "can_query": False,
+            "targets_count": 0,
+            "message": "",
+        }
+        try:
+            result = self.query("up")
+            res["latency_ms"] = round((time.time() - t0) * 1000, 2)
+            if result is not None:
+                res["status"] = "healthy"
+                res["can_query"] = True
+                res["targets_count"] = len(result)
+                res["message"] = (
+                    f"Prometheus 100% operacional ({res['latency_ms']}ms, {len(result)} targets)."
+                )
+            else:
+                res["status"] = "unhealthy"
+                res["message"] = f"Prometheus retornou erro ou status!=success ({res['latency_ms']}ms)."
+        except Exception as e:
+            res["latency_ms"] = round((time.time() - t0) * 1000, 2)
+            res["message"] = f"Falha na conexão com Prometheus: {e}"
+        return res

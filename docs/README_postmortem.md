@@ -108,6 +108,73 @@ $$\text{SLO}_{\text{Jornada}} = \text{SLO}_{\text{Gateway L7}} \times \text{SLO}
 
 ---
 
+
+
+### 2.4 Mecanismo de Zero Data Loss do `donation-service` (Disaster Recovery Buffer no AWS SQS)
+
+Quando a instância do PostgreSQL no Cloud SQL se torna inoperante (por ex.: falha zonal, failover de réplica primária/secundária, janela de congelamento *cutover* de manutenção ou *read-only transaction lock*), a plataforma SolidaryTech **não descarta nenhuma transação financeira** e **não retorna HTTP 500 para o doador**.
+
+#### Fluxo de Contingência e Drenagem Automática
+
+```text
+ ┌──────────────┐       POST /donations
+ │  Doador /    │ ───────────────────────────┐
+ │  Gateway API │ <────────────────────────┐ │
+ └──────────────┘   HTTP 202 Accepted      │ │
+                   (QUEUED_FOR_PROCESSING) │ │
+                                           ▼ ▼
+                            ┌─────────────────────────────────┐
+                            │    donation-service (Golang)    │
+                            └─────────────────────────────────┘
+                                     │               │
+                     1. INSERT Falha │               │ 2. Fallback de
+                   (timeout/connpool)│               │    Emergência
+                                     ▼               ▼
+                          ┌─────────────────┐   ┌───────────────────────────┐
+                          │    Cloud SQL    │   │          AWS SQS          │
+                          │   (PostgreSQL)  │   │  (Fila Durável Multi-AZ)  │
+                          │   [OFFLINE ⚠️]   │   │  Status: PENDING_BUFFERED │
+                          └─────────────────┘   └───────────────────────────┘
+                                     ▲                       │
+                                     │                       │
+                                     │ 3. Ping OK (10s loop) │
+                                     └───────────────────────┘
+                                     startSQSBufferDrainWorker
+                                   (Drena fila -> INSERT -> SQS Delete)
+```
+
+#### Detalhamento Técnico da Implementação (`apps/donation-service/main.go`):
+
+1. **Detecção de Falha & Fallback Imediato (Linhas 251-280)**:
+   * Ao receber a requisição `POST /donations`, o serviço tenta realizar a inserção atômica no Cloud SQL.
+   * Se o banco falhar, o bloco de tratamento intercepta o erro, registra no OpenTelemetry (`RecordError`) e altera o status da doação para `PENDING_BUFFERED`.
+   * A doação é serializada em JSON e enfileirada no **AWS SQS** (`sendNotificationEvent`).
+   * A API responde imediatamente com **`HTTP 202 Accepted`** e o payload:
+     ```json
+     {
+       "status": "QUEUED_FOR_PROCESSING",
+       "message": "Doacao recebida com sucesso e armazenada com seguranca em buffer de alta disponibilidade.",
+       "donation": {
+         "id": 1727376000000,
+         "ngo_id": 1,
+         "amount": 150.00,
+         "status": "PENDING_BUFFERED"
+       }
+     }
+     ```
+   * O doador recebe confirmação de fila com ID único, preservando o SLO de disponibilidade e evitando abandono de doação.
+
+2. **Worker Autônomo de Drenagem (`startSQSBufferDrainWorker`, Linhas 434-491)**:
+   * Uma goroutine em segundo plano monitora a saúde do banco a cada 10 segundos via `a.DB.PingContext(ctx)`.
+   * Enquanto o banco estiver fora do ar, as doações permanecem retidas e persistidas com durabilidade multi-AZ na fila da AWS.
+   * Assim que o PostgreSQL volta a responder:
+     * O worker consome mensagens em lotes (`ReceiveMessageWithContext`, até 10 mensagens simultâneas).
+     * Executa `INSERT INTO donations (ngo_id, amount, donor_name, status) VALUES ($1, $2, $3, 'APPROVED')`.
+     * **Garantia Atômica de Remoção (ACK)**: O comando `DeleteMessageWithContext` na AWS só é executado **após** a confirmação do commit no PostgreSQL. Caso o banco oscile durante a gravação, a mensagem não é deletada do SQS e reaparece após o timeout de visibilidade.
+     * **Resultado**: **$RPO = 0$** (Zero Perda de Dados) e consistência eventual garantida.
+
+---
+
 ## 🌍 3. Resiliência Multi-Região & Disaster Recovery (DR)
 
 A infraestrutura provisionada via **Terraform** (`iac/terraform/terraform.tfvars`) contempla resiliência multi-região para tolerância a falhas catastróficas:

@@ -18,17 +18,17 @@
 
 A confiabilidade da plataforma SolidaryTech é estruturada na regra fundamental do Google SRE:
 
-$$\mathbf{SLA} < \mathbf{SLO} \le \mathbf{SLI}_{	ext{atual}}$$
+$$\mathbf{SLA} < \mathbf{SLO} \le \mathbf{SLI}_{\text{atual}}$$
 
 ### 1.1 SLIs e SLOs do Serviço de Doações (`donation-service` - Caminho Crítico)
 1. **SLI de Disponibilidade (Success Rate)**:
-   $$	ext{SLI}_{	ext{Disponibilidade}} = rac{	ext{Requisições HTTP com status } != 5xx}{	ext{Total de Requisições HTTP}} 	imes 100\%$$
+   $$\text{SLI}_{\text{Disponibilidade}} = \frac{\text{Requisições HTTP } \neq 5xx}{\text{Total de Requisições HTTP}} \times 100\%$$
    - **SLO Alvo (Interno)**: **99.90%** em janela móvel de 30 dias.
    - **SLA Prometido (Contratual)**: **99.50%**.
    - **Error Budget**: **43,20 minutos de erro tolerados por mês** ($100\% - 99.90\% = 0.10\%$).
 
 2. **SLI de Latência (Response Time)**:
-   $$	ext{SLI}_{	ext{Latência}} = rac{	ext{Requisições respondidas em } < 250	ext{ms}}{	ext{Total de Requisições}} 	imes 100\%$$
+   $$\text{SLI}_{\text{Latência}} = \frac{\text{Requisições com Latência } < 250\text{ms}}{\text{Total de Requisições}} \times 100\%$$
    - **SLO Alvo (Interno)**: **99.90%** das requisições atendidas abaixo de 250ms (p95).
 
 ### 1.2 Redução Ativa de MTTR com Observabilidade e Auto-Healing

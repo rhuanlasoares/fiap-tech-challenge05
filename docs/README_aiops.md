@@ -1,165 +1,238 @@
-﻿# ðŸ§  AIOps Predictive Engine (FastAPI + Machine Learning + Google Gemini GenAI)
+# 🧠 AIOps Predictive Engine & Autonomous Self-Healing
 
-O **AIOps Engine** Ã© o cÃ©rebro operacional e de auto-remediaÃ§Ã£o (*Self-Healing*) da plataforma **SolidaryTech**. Ele atua como um engenheiro autÃ´nomo de Site Reliability Engineering (SRE), executando coleta contÃ­nua de telemetria, detecÃ§Ã£o antecipada de anomalias via Machine Learning, diagnÃ³stico inteligente de causa raiz (RCA) via **Google Gemini GenAI**, auto-remediaÃ§Ã£o no Kubernetes e emissÃ£o automatizada de **Post-Mortem** no Slack apÃ³s a estabilizaÃ§Ã£o do cluster.
+> **Plataforma SolidaryTech — Hackathon Tech Challenge (Fase 5)**  
+> **Especialização em Cloud & DevOps / SRE — FIAP**  
+> **Atendimento Direto ao Requisito 3:** *ITSM e AIOps: Gestão Preditiva de Incidentes*
 
-> ðŸ“– **Para detalhes completos sobre o cÃ¡lculo de SLA, SLI, SLO, Error Budget e arquitetura de Disaster Recovery Multi-RegiÃ£o, consulte o documento na raiz: [README_postmortem.md](../../README_postmortem.md).**
+O **AIOps Predictive Engine** é o cérebro operacional e de auto-remediação (*Autonomous Self-Healing*) da plataforma **SolidaryTech**. Ele atua como um engenheiro autônomo de Site Reliability Engineering (SRE), integrando telemetria em tempo real, detecção preditiva de anomalias com Machine Learning, diagnóstico inteligente de causa raiz (RCA) com **Google Gemini GenAI**, execução de ações seguras no Kubernetes e emissão automatizada de relatórios de **Post-Mortem** no Slack.
+
+> [!NOTE]
+> Para detalhes completos sobre a governança de SLA, SLI, SLO, Error Budget e arquitetura de Disaster Recovery Multi-Região, consulte a documentação oficial:
+> * 📊 [README_postmortem.md](README_postmortem.md) — Engenharia de Confiabilidade (SRE) e Governança de SLOs
+> * 🛡️ [PCN_PLANO_CONTINUIDADE_NEGOCIOS.md](PCN_PLANO_CONTINUIDADE_NEGOCIOS.md) — Plano de Continuidade de Negócios (RTO e RPO)
+> * 💰 [FINOPS_FORECAST_CUSTOS.md](FINOPS_FORECAST_CUSTOS.md) — Gestão Financeira e Forecast FinOps
+> * 🎓 [RELATORIO_FINAL_HACKATHON.md](RELATORIO_FINAL_HACKATHON.md) — Relatório Executivo de Entrega da Fase 5
 
 ---
 
-## ðŸ›ï¸ Fluxo Operacional & Ciclo de AnÃ¡lise ContÃ­nua
+## 🔄 Arquitetura do Motor & Ciclo de Vida de Incidentes (ITSM)
 
-O AIOps executa um loop assÃ­ncrono em background a cada **30 segundos** (configurÃ¡vel via `ANALYSIS_INTERVAL_SECONDS`):
+O motor executa um loop assíncrono contínuo a cada **30 segundos** (configurável via `ANALYSIS_INTERVAL_SECONDS`), correlacionando métricas, logs e eventos de infraestrutura:
 
-```text
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚                                 FLUXO OPERACIONAL DO AIOPS ENGINE                                â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚                                                                                                  â”‚
-â”‚  1. COLETA MULTI-SINAL (A cada 30 segundos)                                                      â”‚
-â”‚     â”œâ”€â”€ Prometheus â”€â”€â–¶ 4 Golden Signals (LatÃªncia, TrÃ¡fego, Erros 5xx, SaturaÃ§Ã£o) + RAM + PVCs   â”‚
-â”‚     â”œâ”€â”€ Grafana Loki â”€â–¶ Varredura de logs em busca de "Exception", "Error" e HTTP 5xx           â”‚
-â”‚     â””â”€â”€ K8s API    â”€â”€â–¶ Eventos de Warning (OOMKilled, CrashLoopBackOff, Unhealthy, NodePressure)â”‚
-â”‚                                                                                                  â”‚
-â”‚  2. FILTRO PREDITIVO COM MACHINE LEARNING (Local)                                                â”‚
-â”‚     â”œâ”€â”€ DetecÃ§Ã£o de Memory Leaks lineares (calcula taxa de crescimento e minutos atÃ© OOMKill)    â”‚
-â”‚     â”œâ”€â”€ PrevisÃ£o estatÃ­stica de esgotamento de Persistent Volume Claims (PVCs)                   â”‚
-â”‚     â””â”€â”€ CÃ¡lculo do Cluster Health Score (0 a 100)                                                â”‚
-â”‚     ðŸ’¡ EFICIÃŠNCIA DE CUSTO: Se o cluster estiver 100% estÃ¡vel, o ciclo encerra sem gastar IA.  â”‚
-â”‚                                                                                                  â”‚
-â”‚  3. DIAGNÃ“STICO INTELIGENTE COM GENAI (Google Gemini 3.6 Flash / 3.5 Flash Lite)                 â”‚
-â”‚     â”œâ”€â”€ Acionado automaticamente quando uma anomalia ou risco Ã© detectado                        â”‚
-â”‚     â”œâ”€â”€ Correlaciona em tempo real: [MÃ©tricas] + [Logs do Loki] + [Eventos K8s]                  â”‚
-â”‚     â””â”€â”€ Retorna RCA estruturado: Causa Raiz, Impacto, Comando Recomendado e Playbook de AÃ§Ã£o     â”‚
-â”‚                                                                                                  â”‚
-â”‚  4. AÃ‡ÃƒO AUTOMÃTICA & DISPATCH                                                                   â”‚
-â”‚     â”œâ”€â”€ Web Dashboard & REST API (ExibiÃ§Ã£o interativa em tempo real)                             â”‚
-â”‚     â”œâ”€â”€ NotificaÃ§Ã£o no Slack (Card formatado com badges de severidade e anÃ¡lise da IA)          â”‚
-â”‚     â””â”€â”€ Self-Healing AutÃ´nomo (Se AUTO_HEALING_ENABLED=true: reinÃ­cio de pods / ajuste de rÃ©plicaâ”‚
-â”‚                                                                                                  â”‚
-â”‚  5. ESTABILIZAÃ‡ÃƒO & POST-MORTEM                                                                  â”‚
-â”‚     â”œâ”€â”€ Ao atingir Health Score >= 95 sem riscos residuais: sintetiza relatÃ³rio de Post-Mortem  â”‚
-â”‚     â””â”€â”€ Envia card com MTTR, Causa Raiz e Action Items ao canal do Slack via Webhook            â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+<div align="center">
+  <img src="images/aiops_architecture.svg" alt="Arquitetura do Motor AIOps e Ciclo de Vida de Incidentes (ITSM)" width="100%" />
+  <p><em>Figura 1: Arquitetura completa de telemetria multi-sinal, inferência preditiva com Machine Learning, diagnóstico GenAI (Google Gemini), self-healing no Kubernetes e fechamento com Post-Mortem.</em></p>
+</div>
+
+<details>
+<summary>🔍 <b>Clique para visualizar a especificação técnica do fluxo (Mermaid Diagram)</b></summary>
+
+```mermaid
+flowchart TD
+    subgraph S1["1. Coleta Multi-Sinal (a cada 30s)"]
+        P["📊 Prometheus<br/>Golden Signals, RAM &amp; PVCs"]
+        L["📜 Grafana Loki<br/>Logs de Exceções &amp; 5xx"]
+        K["☸️ K8s API<br/>Eventos de Warning &amp; OOM"]
+    end
+
+    subgraph S2["2. Filtro Preditivo com Machine Learning"]
+        ML1["📈 Detecção Linear de Leaks<br/>np.polyfit / Tempo até OOM"]
+        ML2["💾 Previsão de PVCs<br/>Esgotamento em &lt; 2h"]
+        ML3["🩺 Cluster Health Score<br/>Score Dinâmico de 0 a 100"]
+    end
+
+    subgraph S3["3. Diagnóstico e RCA com GenAI"]
+        GEMINI["🤖 Google Gemini GenAI<br/>RCA Contextual Multi-Sinal"]
+        FALLBACK["🛡️ Fallback Local Heurístico<br/>Regras Especialistas"]
+    end
+
+    subgraph S4["4. Remediação &amp; ITSM Dispatch"]
+        HEAL["⚡ Self-Healing K8s<br/>Rollout Restart com PDB"]
+        SLACK["💬 Slack Incident Dispatch<br/>Alerta P1-P4 com RCA"]
+        DASH["🖥️ Web Dashboard<br/>Métricas em Tempo Real"]
+    end
+
+    subgraph S5["5. Estabilização &amp; Post-Mortem"]
+        PM["📝 Post-Mortem Automático<br/>MTTR &lt; 2 min + Action Items"]
+    end
+
+    P --> ML1
+    P --> ML2
+    P --> ML3
+    L --> ML3
+    K --> ML3
+
+    ML1 -->|Risco Detectado| GEMINI
+    ML2 -->|Risco Detectado| GEMINI
+    ML3 -->|Health Score &lt; 90| GEMINI
+    GEMINI -.->|Fallback Offline| FALLBACK
+
+    GEMINI --> HEAL
+    GEMINI --> SLACK
+    GEMINI --> DASH
+    FALLBACK --> HEAL
+    FALLBACK --> SLACK
+
+    HEAL -->|Cluster Estabilizado Score &gt;= 95| PM
+    PM --> SLACK
 ```
 
----
-
-## ðŸ”‘ Como Obter e Configurar a Chave Gratuita do Google Gemini (Free Tier)
-
-Para utilizar o modelo do Gemini **100% de graÃ§a (sem necessidade de cartÃ£o de crÃ©dito ou crÃ©ditos prÃ©-pagos)**, siga o passo a passo abaixo:
-
-### ðŸ“‹ Passo a Passo para Gerar a Chave GrÃ¡tis:
-1. Acesse o portal do **[Google AI Studio - API Keys](https://aistudio.google.com/app/apikey)**.
-2. FaÃ§a login com a sua conta Google.
-3. Clique no botÃ£o azul **"Create API key"**.
-4. âš ï¸ **IMPORTANTE:** Na janela que abrir, selecione a opÃ§Ã£o **"Create API key in new project"** (Criar chave em um novo projeto).
-   > *Criar em um projeto novo garante que a chave fique vinculada ao **Free Tier padrÃ£o**, que oferece **15 requisiÃ§Ãµes por minuto (RPM) gratuitas**, sem conflitar com projetos que possuam faturamento prÃ©-pago esgotado.*
-5. Copie a chave gerada (ela comeÃ§a com `AIzaSy...`).
+</details>
 
 ---
 
-## ðŸ¤– Modelos Recomendados & Compatibilidade
+## 📋 Ciclo de Vida de Incidentes ITSM (Da Detecção ao Post-Mortem)
 
-A aplicaÃ§Ã£o possui **descoberta dinÃ¢mica de modelos** e suporta a geraÃ§Ã£o mais recente do Gemini:
+Em conformidade estrita com o **Requisito 3 do Hackathon**, o fluxo operacional de incidentes da SolidaryTech é automatizado de ponta a ponta:
 
-| Modelo | Status | Finalidade | Cota Free Tier |
+| Fase ITSM | Gatilho / Origem | Ação do AIOps Engine | SLA / Tempo Médio |
 | :--- | :--- | :--- | :--- |
-| **`gemini-3.6-flash`** | â­ **Recomendado** | Modelo padrÃ£o de alta velocidade e raciocÃ­nio para SRE | 15 RPM GrÃ¡tis |
-| **`gemini-3.5-flash-lite`** | Ativo | Modelo ultra rÃ¡pido e leve para microdiagnÃ³sticos | 15 RPM GrÃ¡tis |
-| **`gemini-3.1-pro-preview`** | Ativo | AnÃ¡lises complexas e diagnÃ³sticos aprofundados | DisponÃ­vel |
+| **1. Detecção Preditiva** | Prometheus, Loki ou K8s Events | Regressão linear detecta tendência de OOMKill antes do Pod travar. | **< 30 segundos** |
+| **2. Triagem e Alerta** | Anomalia confirmada pelo ML | Envio de card de alerta enriquecido para o canal do Slack com classificação de severidade (`P1` a `P4`). | **Instantâneo** |
+| **3. Diagnóstico (RCA)** | Disparo automático no Gemini | Análise contextual dos logs recentes do Loki e métricas do Prometheus para identificar a causa raiz. | **3 a 5 segundos** |
+| **4. Auto-Remediação** | `AUTO_HEALING_ENABLED=true` | Rollout restart gracioso do deployment afetado com respeito a PodDisruptionBudgets (PDB). | **< 60 segundos** |
+| **5. Estabilização** | Health Score $\ge 95$ | Validação contínua do cluster sem erros residuais por 2 ciclos consecutivos. | **1 a 2 minutos** |
+| **6. Post-Mortem** | Cluster recuperado | O Gemini sintetiza o relatório de Post-Mortem com timeline, MTTR calculado e itens de ação preventivos. | **Automático** |
+
+> [!TIP]
+> **Redução Ativa do MTTR (Mean Time to Recovery):**  
+> Em uma operação tradicional, a triagem manual, análise de logs e reinicialização de pods levam tipicamente de **15 a 30 minutos**. O AIOps Engine reduz o MTTR para **menos de 2 minutos**, atuando antes mesmo da indisponibilidade ser percebida pelo doador.
 
 ---
 
-## ðŸ›¡ï¸ ResiliÃªncia & Fallback DeterminÃ­stico
+## 🤖 Modelos Gemini Suportados & Compatibilidade
 
-Se por qualquer motivo a conexÃ£o com a API do Google falhar (falta de internet, chave expirada ou quota temporariamente excedida), o AIOps Engine **nÃ£o para e nÃ£o quebra**. Ele aciona automaticamente o mÃ³dulo de fallback **`_expert_rulebook_rca`**, que gera o diagnÃ³stico de causa raiz, as aÃ§Ãµes de remediaÃ§Ã£o e o Post-Mortem de forma local e determinÃ­stica, mantendo 100% de disponibilidade.
+O AIOps Engine possui **descoberta dinâmica de modelos** com fallback inteligente para garantir operação 100% contínua:
+
+| Modelo | Status | Finalidade | Cota Free Tier (Google AI Studio) |
+| :--- | :--- | :--- | :--- |
+| **`gemini-3.6-flash-lite`** | ⭐ **Recomendado** | Altíssima velocidade, baixíssima latência e excelente raciocínio SRE | 15 RPM Gratuitas |
+| **`gemini-3.6-flash`** | Ativo | Análises profundas de correlação de logs extensos e traces | 15 RPM Gratuitas |
+| **`gemini-3.5-flash-lite`** | Ativo | Modelo leve e econômico para microdiagnósticos | 15 RPM Gratuitas |
+| **`gemini-3.1-pro-preview`** | Compatível | Análises arquiteturais complexas e síntese executiva | Disponível |
 
 ---
 
-## ðŸ³ Como Rodar Localmente via Docker
+## 🛡️ Políticas de Remediação Segura & Guardrails
+
+Para garantir a estabilidade do cluster e evitar efeitos colaterais destrutivos, o AIOps implementa 4 guardrails fundamentais:
+
+1. **Modo Shadow / Dry-Run (`AUTO_HEALING_ENABLED=false`)**:
+   - Por padrão, o motor analisa, gera o diagnóstico de causa raiz e envia alertas no Slack **sem aplicar alterações no Kubernetes**, permitindo auditoria humana inicial.
+2. **Rate Limiting & Anti-Flapping**:
+   - Limite estrito de no máximo **2 reinicializações por serviço em uma janela de 30 minutos**, impedindo loops de reinicialização (*flapping*).
+3. **Respeito aos Pod Disruption Budgets (PDB)**:
+   - As reinicializações utilizam a API de Rollout do Kubernetes (`kubectl rollout restart`), garantindo que o número mínimo de réplicas saudáveis permaneça ativo durante a intervenção.
+4. **Resiliência com Fallback Determinístico Local**:
+   - Caso a API externa do Google Gemini fique indisponível (limite de quota temporário ou falha de conectividade), o módulo **`_expert_rulebook_rca`** assume o diagnóstico localmente através de heurísticas determinísticas, mantendo o auto-healing 100% operacional.
+
+---
+
+## 🔑 Como Obter a Chave Gratuita do Google Gemini (Free Tier)
+
+Para utilizar o Gemini de forma **100% gratuita (sem necessidade de cartão de crédito)**:
+
+1. Acesse o portal **[Google AI Studio - API Keys](https://aistudio.google.com/app/apikey)**.
+2. Faça login com sua conta Google.
+3. Clique em **"Create API key"**.
+4. ⚠️ **IMPORTANTE:** Selecione **"Create API key in new project"** (Criar chave em um novo projeto). Isso garante vinculação ao **Free Tier padrão (15 RPM gratuitas)**.
+5. Copie a chave gerada (inicia com `AIzaSy...`).
+
+---
+
+## 🐳 Como Executar Localmente via Docker
 
 ### 1. Build da Imagem
 ```bash
 docker build -t aiops-engine apps/aiops-engine
 ```
 
-### 2. Executar o ContÃªiner com a Chave e Webhook do Slack
+### 2. Execução do Contêiner
 ```bash
-docker run -d --name aiops-engine-test \
-  -p 8000:8000 \
-  -e GEMINI_API_KEY="AIzaSySuaChaveAqui" \
-  -e GEMINI_MODEL="gemini-3.6-flash" \
-  -e AUTO_HEALING_ENABLED="true" \
-  -e SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..." \
-  aiops-engine
+docker run -d --name aiops-engine-test   -p 8000:8000   -e GEMINI_API_KEY="AIzaSySuaChaveAqui"   -e GEMINI_MODEL="gemini-3.6-flash-lite"   -e AUTO_HEALING_ENABLED="true"   -e SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."   aiops-engine
 ```
 
 ---
 
-## ðŸ§ª Como Testar a InteligÃªncia da IA
+## 🧪 Testes de Caos & Simulação de Anomalias
 
-O AIOps Engine possui endpoints de simulaÃ§Ã£o (*Chaos Engineering*) para validar o comportamento da IA:
+O AIOps Engine expõe endpoints dedicados para injeção de falhas sintéticas, permitindo validar a inteligência artificial ao vivo:
 
-### SimulaÃ§Ã£o 1: Memory Leak (PrevenÃ§Ã£o de OOMKill)
+### Simulação 1: Memory Leak (Prevenção de OOMKilled)
+Injeta uma taxa de consumo de memória progressiva para testar a regressão linear e o cálculo de tempo até OOM:
 ```bash
-curl -X POST http://localhost:8000/api/simulate-anomaly \
-  -H "Content-Type: application/json" \
-  -d '{"scenario": "memory_leak"}' | jq .
+curl -X POST http://localhost:8000/api/simulate-anomaly   -H "Content-Type: application/json"   -d '{"scenario": "memory_leak"}' | jq .
 ```
 
-### SimulaÃ§Ã£o 2: Surto de Erros HTTP 5xx
+### Simulação 2: Surto de Erros HTTP 5xx (Golden Metric)
+Injeta uma taxa de falhas HTTP 500 no caminho crítico de doações para testar o diagnóstico de causa raiz:
 ```bash
-curl -X POST http://localhost:8000/api/simulate-anomaly \
-  -H "Content-Type: application/json" \
-  -d '{"scenario": "5xx_surge"}' | jq .
+curl -X POST http://localhost:8000/api/simulate-anomaly   -H "Content-Type: application/json"   -d '{"scenario": "5xx_surge"}' | jq .
 ```
 
-### Consultar os DiagnÃ³sticos Gerados pela IA
+### Consultar os Diagnósticos Gerados pela IA
 ```bash
 curl -s http://localhost:8000/api/insights | jq .
 ```
 
 ---
 
-## ðŸ–¥ï¸ Dashboard Web Interativo
+## 🖥️ Dashboard Web Interativo
 
-Acesse no navegador:
-ðŸ‘‰ **[http://localhost:8000](http://localhost:8000)**
+Acesse no navegador: **[http://localhost:8000](http://localhost:8000)**
 
-Recursos do Dashboard:
-* **Cluster Health Index:** Indicador circular com score de 0 a 100 e gradiente dinÃ¢mico.
-* **DiagnÃ³sticos Gemini GenAI:** Cards com RCA, causa raiz, comando sugerido e playbook.
-* **Painel de SimulaÃ§Ã£o:** BotÃµes interativos para simular falhas e testar auto-remediaÃ§Ã£o.
-* **Log Stream do Loki:** Visualizador em tempo real dos logs de erro do cluster.
+### Recursos da Interface:
+* **Cluster Health Index**: Indicador circular com pontuação dinâmica de 0 a 100 baseado na gravidade dos incidentes.
+* **Cards de Diagnóstico Gemini GenAI**: Exibição estruturada de Causa Raiz, Impacto, Comando Sugerido e Playbook de Resolução.
+* **Painel de Simulação de Caos**: Botões interativos para disparar falhas sintéticas em 1 clique durante apresentações.
+* **Log Stream do Loki**: Visualização em tempo real das mensagens de erro extraídas do cluster.
 
 ---
 
-## ðŸ”Œ Tabela de Endpoints da API REST
+## 🔌 Endpoints da API REST
 
-| MÃ©todo | Rota | DescriÃ§Ã£o |
+| Método | Rota | Descrição |
 | :--- | :--- | :--- |
-| `GET` | `/` | Retorna o dashboard web interativo. |
-| `GET` | `/health` | Health check nativo da aplicaÃ§Ã£o (K8s probes). |
-| `GET` | `/api/status` | Retorna o payload completo de telemetria e estado atual. |
-| `GET` | `/api/health-score` | Retorna a nota de saÃºde atual do cluster (0 a 100). |
-| `GET` | `/api/predictions` | Lista todas as previsÃµes ativas de esgotamento de memÃ³ria e PVCs. |
-| `GET` | `/api/anomalies` | Lista anomalias de latÃªncia e taxas de erro HTTP detectadas. |
-| `GET` | `/api/insights` | Retorna os diagnÃ³sticos de RCA gerados pelo Google Gemini. |
-| `POST` | `/api/simulate-anomaly` | Dispara cenÃ¡rios de caos sintÃ©ticos (`memory_leak`, `5xx_surge`). |
-| `POST` | `/api/analyze-now` | ForÃ§a a execuÃ§Ã£o imediata de um ciclo de anÃ¡lise completo. |
-| `POST` | `/api/remediate/{id}` | Dispara manualmente a remediaÃ§Ã£o de um risco especÃ­fico. |
+| `GET` | `/` | Retorna o Dashboard Web interativo. |
+| `GET` | `/live` | Liveness Probe r?pida do Kubernetes (processo uvicorn/FastAPI). |
+| `GET` | `/ready` | Readiness Probe de telemetria (valida conectividade com Loki, Prometheus e K8s). |
+| `GET` | `/health` | Health Check mantido para compatibilidade com GKE Load Balancers. |
+| `GET` | `/api/connectivity-test` | Auditoria completa de conectividade e lat?ncia dos backends (Loki, Prom, K8s, Gemini, Slack). |
+| `GET` | `/api/post-mortems` | Hist?rico de relat?rios oficiais de Post-Mortem SRE gerados com MTTR e RCA. |
+| `GET` | `/api/status` | Retorna o payload completo de telemetria e estado operacional. |
+| `GET` | `/api/health-score` | Retorna a pontuação de saúde consolidada do cluster (0 a 100). |
+| `GET` | `/api/predictions` | Lista previsões ativas de esgotamento de memória e PVCs. |
+| `GET` | `/api/anomalies` | Lista anomalias de latência e taxa de erro detectadas. |
+| `GET` | `/api/insights` | Retorna os diagnósticos de Causa Raiz (RCA) gerados pelo Gemini. |
+| `POST` | `/api/simulate-anomaly` | Dispara cenários de caos sintéticos (`memory_leak`, `5xx_surge`). |
+| `POST` | `/api/analyze-now` | Força a execução imediata de um ciclo de análise completo. |
+| `POST` | `/api/remediate/{id}` | Dispara manualmente a remediação de um risco específico. |
 
 ---
 
-## âš™ï¸ VariÃ¡veis de Ambiente
+## ⚙️ Variáveis de Ambiente
 
-| VariÃ¡vel | PadrÃ£o | DescriÃ§Ã£o |
+| Variável | Padrão | Descrição |
 | :--- | :--- | :--- |
 | `GEMINI_API_KEY` | `""` | Chave de API do Google Gemini (Google AI Studio). |
-| `GEMINI_MODEL` | `gemini-3.6-flash` | Modelo do Gemini para geraÃ§Ã£o de Root Cause Analysis e Post-Mortem. |
-| `ANALYSIS_INTERVAL_SECONDS` | `30` | Intervalo em segundos entre ciclos de anÃ¡lise em background. |
-| `AUTO_HEALING_ENABLED` | `false` | Habilita aÃ§Ãµes automÃ¡ticas de auto-cura no Kubernetes. |
-| `PROMETHEUS_URL` | `http://monitoring-kube-prometheus-prometheus.monitoring-ns:9090` | Endpoint do Prometheus no cluster. |
-| `LOKI_URL` | `http://loki.monitoring-ns:3100` | Endpoint do Loki no cluster. |
-| `TARGET_NAMESPACES` | `donation-ns,ngo-ns,volunteer-ns,monitoring-ns,kubecost` | Namespaces monitorados pelo motor. |
-| `SLACK_WEBHOOK_URL` | `""` | Webhook do Slack para alertas de incidentes e Post-Mortem. |
+| `GEMINI_MODEL` | `gemini-3.6-flash-lite` | Modelo do Gemini utilizado para análise de RCA e Post-Mortem. |
+| `ANALYSIS_INTERVAL_SECONDS` | `30` | Intervalo em segundos entre ciclos de coleta e análise em background. |
+| `AUTO_HEALING_ENABLED` | `false` | Se `true`, autoriza ações autônomas de reinicialização e auto-cura no cluster. |
+| `PROMETHEUS_URL` | `http://monitoring-kube-prometheus-prometheus.monitoring-ns.svc.cluster.local:9090` | Endpoint do Prometheus no cluster GKE. |
+| `LOKI_URL` | `http://loki.monitoring-ns.svc.cluster.local:3100` | Endpoint do Loki no cluster GKE. |
+| `TARGET_NAMESPACES` | `donation-ns,ngo-ns,volunteer-ns,monitoring-ns,kubecost` | Namespaces monitorados ativamente pelo motor. |
+| `SLACK_WEBHOOK_URL` | `""` | URL do Webhook do Slack para alertas de incidentes e envio de Post-Mortem. |
+| `SLACK_ALERT_COOLDOWN_SECONDS` | `300` | Tempo mínimo de espera (5 min) entre alertas repetidos do mesmo Pod. |
+| `AIOPS_LANGUAGE` | `pt-BR` | Idioma utilizado para os relatórios, alertas e diagnósticos gerados. |
+
+---
+
+## 🎯 Alinhamento com a Avaliação do Tech Challenge (Fase 5)
+
+| Requisito do PDF | Implementação no AIOps Engine | Evidência Comprovada |
+| :--- | :--- | :--- |
+| **AIOps Preditivo** | Detecção de Memory Leaks e PVCs via Machine Learning antes do impacto. | `core/predictor.py` + Endpoint `/api/predictions` |
+| **GenAI RCA** | Diagnóstico inteligente de causa raiz contextualizado via Google Gemini. | `core/ai_reasoner.py` + Endpoint `/api/insights` |
+| **Ciclo ITSM** | Desenho do ciclo de vida de incidentes com Post-Mortem automático no Slack. | Diagrama Mermaid + Envio automático ao estabilizar |
+| **Redução de MTTR** | Auto-cura autônoma via Kubernetes API reduzindo recuperação para $< 2$ min. | `core/remediator.py` + Rollout Restart |
+| **Governança SRE** | Monitoramento das 4 Golden Signals do Google e correlação com Loki. | `core/prometheus_client.py` + `core/loki_client.py` |

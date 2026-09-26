@@ -23,8 +23,8 @@ apps/
 | :--- | :--- | :--- | :--- |
 | **`aiops-engine`** | Python 3.12+ (FastAPI) | Detecção de anomalias, análise de causa raiz com IA (Gemini 3.5), auto-remediação de pods e alertas no Slack | Kubernetes API, Prometheus, Loki, Google Gemini, Slack Webhooks |
 | **`ngo-service`** | Python / Flask | Gerenciamento de ONGs parceiras, cadastro e consulta de projetos sociais | PostgreSQL (Cloud SQL), OpenTelemetry, Prometheus |
-| **`donation-service`** | Python / Flask | Recepção e liquidação assíncrona de doações financeiras | Amazon SQS, PostgreSQL (Cloud SQL), KEDA, OpenTelemetry |
-| **`volunteer-service`** | Python / Flask | Gestão de perfis e engajamento de voluntários | PostgreSQL (Cloud SQL), OpenTelemetry, Prometheus |
+| **`donation-service`** | Go 1.22 (Standard Library + AWS SDK v1) | Recepção de doações com SRE Disaster Recovery Buffer (Zero Data Loss via SQS fallback & auto-drain) | Amazon SQS, PostgreSQL (Cloud SQL), OpenTelemetry, Prometheus |
+| **`volunteer-service`** | Python 3.12 (Flask + Boto3) | Gestão de perfis, competências e engajamento de voluntários | AWS DynamoDB, Amazon SQS, OpenTelemetry, Prometheus |
 | **`gcp-status-checker`** | Python | Watchdog autônomo executado via GitHub Actions para detecção de falhas da GCP e auto-disparo de Disaster Recovery com persistência de estado em GCS | GCP Status API, GCS State Storage, GitHub Actions REST API, Slack Webhooks |
 
 ---
