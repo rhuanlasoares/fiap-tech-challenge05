@@ -103,8 +103,11 @@ resource "google_project_iam_member" "sql_permissions" {
   member  = var.sa_wifederation_member
 }
 
-resource "google_project_iam_member" "artreg_permissions" {
-  project = var.project_id
-  role    = "roles/artifactregistry.writer"
-  member  = var.sa_wifederation_member
+resource "google_artifact_registry_repository_iam_member" "artreg_permissions" {
+  for_each   = var.artreg
+  project    = var.project_id
+  location   = each.value.region
+  repository = each.value.name_artreg
+  role       = "roles/artifactregistry.writer"
+  member     = var.sa_wifederation_member
 }
