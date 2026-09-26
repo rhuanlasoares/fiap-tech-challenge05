@@ -1,18 +1,38 @@
 livenessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  failureThreshold: 5
+  timeoutSeconds: 5
+readinessProbe:
   initialDelaySeconds: 15
   periodSeconds: 10
   failureThreshold: 5
-  timeoutSeconds: 3
-readinessProbe:
-  initialDelaySeconds: 10
-  periodSeconds: 5
-  failureThreshold: 5
-  timeoutSeconds: 3
+  timeoutSeconds: 5
 mode: "deployment"
 
 fullnameOverride: "opentelemetry-collector"
 
-replicaCount: 1
+replicaCount: 2
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - opentelemetry-collector
+          topologyKey: kubernetes.io/hostname
 
 image:
   repository: "otel/opentelemetry-collector-contrib"
@@ -31,11 +51,11 @@ extraEnvs:
 
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 150m
+    memory: 256Mi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 768Mi
 
 ports:
   otlp:
