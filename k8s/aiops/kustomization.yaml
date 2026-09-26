@@ -3,18 +3,21 @@ kind: Kustomization
 namespace: aiops
 
 resources:
-  - rollout.yaml
-  - rbac.yaml
-  - service.yaml
-  - health-check.yaml
-  - service_account.yaml
+- rollout.yaml
+- rbac.yaml
+- service.yaml
+- health-check.yaml
+- service_account.yaml
 
 labels:
-  - includeSelectors: true
-    pairs:
-      app: aiops-engine
+- includeSelectors: true
+  pairs:
+    app: aiops-engine
 
 images:
-  - name: aiops-engine
-    newName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-aiops/aiops
-    newTag: latest
+- name: aiops
+  newName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-aiops/aiops-engine
+  newTag: 32e24a4a6437fbe112534185f332cd48c6aa2acd
+- name: aiops-engine
+  newName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-aiops/aiops
+  newTag: latest
