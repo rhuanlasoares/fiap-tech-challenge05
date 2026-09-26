@@ -96,7 +96,6 @@ class LokiClient:
             logger.debug(f"Failed to push log to Loki ({url}): {e}")
             return False
 
-
     def check_connectivity(
         self, test_namespaces: Optional[List[str]] = None
     ) -> Dict[str, Any]:

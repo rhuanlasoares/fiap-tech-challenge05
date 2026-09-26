@@ -29,9 +29,8 @@ def setup_telemetry(service_name: str, service_namespace: str):
     # 1. OpenTelemetry Logging (Loki)
     try:
         from opentelemetry._logs import set_logger_provider
-        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
-            OTLPLogExporter,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import \
+            OTLPLogExporter
         from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
         from opentelemetry.sdk.resources import Resource
@@ -71,13 +70,11 @@ def setup_telemetry(service_name: str, service_namespace: str):
     latency_histogram = None
     try:
         from opentelemetry import metrics
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
-            OTLPMetricExporter,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import \
+            OTLPMetricExporter
         from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import (
-            PeriodicExportingMetricReader,
-        )
+        from opentelemetry.sdk.metrics.export import \
+            PeriodicExportingMetricReader
         from opentelemetry.sdk.resources import Resource
 
         metric_resource = Resource.create(
@@ -120,9 +117,8 @@ def setup_telemetry(service_name: str, service_namespace: str):
     # 3. OpenTelemetry Tracing (Traces & Server Spans para New Relic APM via OTel Collector)
     try:
         from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+            OTLPSpanExporter
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
@@ -170,16 +166,17 @@ app = Flask(__name__)
 # Auto-instrumentação OpenTelemetry para Flask e Boto3 (Gera Server Spans para o New Relic APM)
 try:
     from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
     FlaskInstrumentor().instrument_app(app)
 except Exception as exc:
     log.warning("Falha ao instrumentar Flask com OpenTelemetry: %s", exc)
 
 try:
     from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+
     BotocoreInstrumentor().instrument()
 except Exception as exc:
     log.warning("Falha ao instrumentar Botocore com OpenTelemetry: %s", exc)
-
 
 
 @app.before_request
@@ -194,6 +191,7 @@ def after_request(response):
         if response.status_code >= 500:
             try:
                 import newrelic.agent
+
                 newrelic.agent.notice_error()
             except Exception:
                 pass
@@ -286,6 +284,7 @@ def register_volunteer():
         log.error("Erro ao salvar voluntário no DynamoDB: %s", e)
         try:
             import newrelic.agent
+
             newrelic.agent.notice_error()
         except Exception:
             pass
@@ -306,6 +305,7 @@ def get_volunteers_by_ngo(ngo_id):
         log.error("Erro ao buscar dados no DynamoDB: %s", e)
         try:
             import newrelic.agent
+
             newrelic.agent.notice_error()
         except Exception:
             pass
@@ -317,6 +317,7 @@ def get_volunteers_by_ngo(ngo_id):
 def error():
     try:
         import newrelic.agent
+
         newrelic.agent.notice_error()
     except Exception:
         pass

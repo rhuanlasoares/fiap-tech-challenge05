@@ -18,7 +18,8 @@ from core.k8s_client import K8sClient
 from core.loki_client import LokiClient, LokiLoggingHandler
 from core.predictor import AiOpsPredictor
 from core.prometheus_client import PrometheusClient
-from core.remediator import AiOpsRemediator, send_slack_alert, send_slack_post_mortem
+from core.remediator import (AiOpsRemediator, send_slack_alert,
+                             send_slack_post_mortem)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -217,7 +218,10 @@ def sync_analysis_cycle():
                     },
                 )
 
-                alert_key = item.get("id") or f"{item.get('type')}:{item.get('pod') or item.get('service') or item.get('pvc')}"
+                alert_key = (
+                    item.get("id")
+                    or f"{item.get('type')}:{item.get('pod') or item.get('service') or item.get('pvc')}"
+                )
                 send_slack_alert(
                     title=item.get("type", "Cluster Incident"),
                     message=item.get("message", "Anomalia detectada no cluster."),
@@ -275,13 +279,17 @@ def sync_analysis_cycle():
                     state["active_incident"]["anomalies"] = list(all_anomalies)
                     state["active_incident"]["insights"] = list(all_insights)
                     if executed_remediations:
-                        state["active_incident"]["remediations"].extend(executed_remediations)
+                        state["active_incident"]["remediations"].extend(
+                            executed_remediations
+                        )
 
             # 2. Se score recuperou para >= 95 E havia um incidente ativo: CLUSTER ESTABILIZADO!
             elif score >= 95 and state["active_incident"] is not None:
                 inc = state["active_incident"]
                 inc["resolved_at"] = datetime.now(timezone.utc).isoformat()
-                duration = round(time.time() - inc.get("start_timestamp", time.time()), 1)
+                duration = round(
+                    time.time() - inc.get("start_timestamp", time.time()), 1
+                )
                 inc["duration_seconds"] = duration
                 inc["final_score"] = score
 
@@ -367,11 +375,21 @@ async def lifespan(app: FastAPI):
     diag = check_all_telemetry_connectivity()
     state["integrations"] = diag
 
-    print(f"  ✅ Grafana Loki:       [{diag['loki']['status'].upper()}] - {diag['loki']['message']}")
-    print(f"  ✅ Prometheus:         [{diag['prometheus']['status'].upper()}] - {diag['prometheus']['message']}")
-    print(f"  ✅ Kubernetes API:     [{diag['kubernetes']['status'].upper()}] - {diag['kubernetes']['message']}")
-    print(f"  ✅ Google Gemini GenAI:[{diag['gemini']['status'].upper()}] - {diag['gemini']['message']}")
-    print(f"  ✅ Slack Alerts:       [{diag['slack']['status'].upper()}] - {diag['slack']['message']}")
+    print(
+        f"  ✅ Grafana Loki:       [{diag['loki']['status'].upper()}] - {diag['loki']['message']}"
+    )
+    print(
+        f"  ✅ Prometheus:         [{diag['prometheus']['status'].upper()}] - {diag['prometheus']['message']}"
+    )
+    print(
+        f"  ✅ Kubernetes API:     [{diag['kubernetes']['status'].upper()}] - {diag['kubernetes']['message']}"
+    )
+    print(
+        f"  ✅ Google Gemini GenAI:[{diag['gemini']['status'].upper()}] - {diag['gemini']['message']}"
+    )
+    print(
+        f"  ✅ Slack Alerts:       [{diag['slack']['status'].upper()}] - {diag['slack']['message']}"
+    )
     print("=" * 72)
 
     task = asyncio.create_task(background_monitor())
@@ -695,18 +713,12 @@ def remediate_risk(risk_id: str):
         state["predictions"] = [
             p for p in state["predictions"] if p.get("id") != risk_id
         ]
-        state["anomalies"] = [
-            a for a in state["anomalies"] if a.get("id") != risk_id
-        ]
+        state["anomalies"] = [a for a in state["anomalies"] if a.get("id") != risk_id]
         state["simulated_predictions"] = [
-            p
-            for p in state.get("simulated_predictions", [])
-            if p.get("id") != risk_id
+            p for p in state.get("simulated_predictions", []) if p.get("id") != risk_id
         ]
         state["simulated_anomalies"] = [
-            a
-            for a in state.get("simulated_anomalies", [])
-            if a.get("id") != risk_id
+            a for a in state.get("simulated_anomalies", []) if a.get("id") != risk_id
         ]
         state["simulated_insights"] = [
             i
