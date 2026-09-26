@@ -71,7 +71,7 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
 
-          git pull
+          git pull --rebase
           git add -u ${{ inputs.service_path }}
           
           if git diff --staged --quiet; then
@@ -152,7 +152,7 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           
-          git pull
+          git pull --rebase
           git add -u ${{ inputs.service_path }}
           
           if git diff --staged --quiet; then
