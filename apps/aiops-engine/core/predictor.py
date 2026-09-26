@@ -114,8 +114,12 @@ class AiOpsPredictor:
                     msg = f"Latência do serviço {svc} está inaceitavelmente alta (p99={p99_ms}ms)."
                     rec = "Inspecionar consultas lentas no Cloud SQL ou atrasos na fila SQS."
                 else:
-                    msg = f"Service {svc} latency is unacceptably high (p99={p99_ms}ms)."
-                    rec = "Inspect downstream queries in Cloud SQL or SQS backlog delays."
+                    msg = (
+                        f"Service {svc} latency is unacceptably high (p99={p99_ms}ms)."
+                    )
+                    rec = (
+                        "Inspect downstream queries in Cloud SQL or SQS backlog delays."
+                    )
 
                 anomalies.append(
                     {
@@ -144,7 +148,9 @@ class AiOpsPredictor:
                     rec = "Expandir capacidade do PVC via StorageClass ou limpar logs/dados antigos."
                 else:
                     msg = f"PVC {pvc.get('pvc')} is {used_pct}% full. Projected to exhaust in {hs_full} hours."
-                    rec = "Expand PVC capacity via StorageClass or cleanup old logs/data."
+                    rec = (
+                        "Expand PVC capacity via StorageClass or cleanup old logs/data."
+                    )
 
                 risks.append(
                     {

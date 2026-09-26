@@ -27,7 +27,9 @@ def send_slack_alert(
         return False
 
     # Janela de cooldown para evitar spam repetido no Slack
-    key = alert_key or f"{title}:{rca.get('affected_service') if rca else ''}:{severity}"
+    key = (
+        alert_key or f"{title}:{rca.get('affected_service') if rca else ''}:{severity}"
+    )
     now = time.time()
     cooldown = settings.SLACK_ALERT_COOLDOWN_SECONDS
 
@@ -158,6 +160,7 @@ class AiOpsRemediator:
             "message": "No automated remediation handler defined for this risk type.",
         }
 
+
 def send_slack_post_mortem(
     post_mortem: Dict[str, Any],
     force: bool = True,
@@ -169,7 +172,9 @@ def send_slack_post_mortem(
 
     title = post_mortem.get("title", "Relatório Oficial de Post-Mortem SRE")
     status = post_mortem.get("status", "RESOLVED")
-    mttr = post_mortem.get("mttr_formatted") or f"{post_mortem.get("mttr_minutes", 0)} min"
+    mttr = (
+        post_mortem.get("mttr_formatted") or f"{post_mortem.get("mttr_minutes", 0)} min"
+    )
     score = post_mortem.get("final_score", 100)
     summary = post_mortem.get("executive_summary", "")
     rca = post_mortem.get("root_cause_analysis", "")
@@ -192,7 +197,10 @@ def send_slack_post_mortem(
                 {"type": "mrkdwn", "text": f"*Status do Incidente:*\n`✅ {status}`"},
                 {"type": "mrkdwn", "text": f"*Duração (MTTR):*\n`⏱️ {mttr}`"},
                 {"type": "mrkdwn", "text": f"*Health Score Final:*\n`🎯 {score}/100`"},
-                {"type": "mrkdwn", "text": "*Cluster / Engine:*\n`gke-samerica / AIOps`"},
+                {
+                    "type": "mrkdwn",
+                    "text": "*Cluster / Engine:*\n`gke-samerica / AIOps`",
+                },
             ],
         },
         {
@@ -201,20 +209,38 @@ def send_slack_post_mortem(
         },
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*🔍 Causa Raiz Técnica (Google Gemini GenAI):*\n{rca}"},
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*🔍 Causa Raiz Técnica (Google Gemini GenAI):*\n{rca}",
+            },
         },
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*🛠️ Remediação que Estabilizou o Cluster:*\n```{rem}```"},
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*🛠️ Remediação que Estabilizou o Cluster:*\n```{rem}```",
+            },
         },
     ]
 
     if action_items:
-        items_str = "\n".join([f"• {item}" if not item.startswith("•") and not item[0].isdigit() else item for item in action_items])
+        items_str = "\n".join(
+            [
+                (
+                    f"• {item}"
+                    if not item.startswith("•") and not item[0].isdigit()
+                    else item
+                )
+                for item in action_items
+            ]
+        )
         blocks.append(
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*🛡️ Ações Preventivas (Action Items):*\n{items_str}"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*🛡️ Ações Preventivas (Action Items):*\n{items_str}",
+                },
             }
         )
 

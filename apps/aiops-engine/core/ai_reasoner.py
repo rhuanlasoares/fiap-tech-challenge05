@@ -266,7 +266,9 @@ class AasReasoner:
                     ),
                     "time_to_impact_minutes": 15,
                     "recommended_action": str(
-                        item.get("recommendation", "Inspecionar telemetria e logs dos pods.")
+                        item.get(
+                            "recommendation", "Inspecionar telemetria e logs dos pods."
+                        )
                     ),
                     "prevention_playbook": [
                         "Verificar métricas no Prometheus",
@@ -305,13 +307,17 @@ class AasReasoner:
             "message": "",
         }
         if not self.api_key:
-            res["message"] = "GEMINI_API_KEY não configurada. Fallback determinístico ativo."
+            res["message"] = (
+                "GEMINI_API_KEY não configurada. Fallback determinístico ativo."
+            )
             return res
 
         try:
             import google.generativeai as genai
 
-            test_model = genai.GenerativeModel(self.model_name or "gemini-3.6-flash-lite")
+            test_model = genai.GenerativeModel(
+                self.model_name or "gemini-3.6-flash-lite"
+            )
             test_resp = test_model.generate_content("Ping. Responda apenas OK.")
             res["latency_ms"] = round((time.time() - t0) * 1000, 2)
             if test_resp and getattr(test_resp, "text", None):
@@ -324,7 +330,9 @@ class AasReasoner:
                 res["message"] = "Resposta vazia da API do Gemini."
         except Exception as e:
             res["latency_ms"] = round((time.time() - t0) * 1000, 2)
-            res["message"] = f"Aviso na conexão com Gemini API: {e}. Fallback determinístico pronto."
+            res["message"] = (
+                f"Aviso na conexão com Gemini API: {e}. Fallback determinístico pronto."
+            )
 
         return res
 
@@ -336,8 +344,11 @@ class AasReasoner:
                 return pm
         return self._expert_rulebook_post_mortem(incident)
 
-    def _call_gemini_post_mortem(self, incident: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _call_gemini_post_mortem(
+        self, incident: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         import json
+
         import google.generativeai as genai
 
         language = settings.AIOPS_LANGUAGE
@@ -371,17 +382,25 @@ LANGUAGE REQUIREMENT: All textual fields MUST be strictly written in '{language}
                 elif resp_text.startswith("```"):
                     resp_text = resp_text[3:-3].strip()
                 result = json.loads(resp_text)
-                logger.info(f"Post-Mortem successfully generated via Gemini model: {candidate}")
+                logger.info(
+                    f"Post-Mortem successfully generated via Gemini model: {candidate}"
+                )
                 return result
             except Exception as e:
-                logger.warning(f"Post-Mortem model candidate '{candidate}' failed: {e}. Trying fallback candidate...")
+                logger.warning(
+                    f"Post-Mortem model candidate '{candidate}' failed: {e}. Trying fallback candidate..."
+                )
 
         return None
 
     def _expert_rulebook_post_mortem(self, incident: Dict[str, Any]) -> Dict[str, Any]:
         duration_sec = incident.get("duration_seconds", 120.0)
         mttr_min = round(duration_sec / 60.0, 1) if duration_sec > 0 else 2.0
-        mttr_fmt = f"{int(mttr_min)}m {int((mttr_min*60)%60)}s" if mttr_min >= 1 else f"{int(duration_sec)}s"
+        mttr_fmt = (
+            f"{int(mttr_min)}m {int((mttr_min*60)%60)}s"
+            if mttr_min >= 1
+            else f"{int(duration_sec)}s"
+        )
 
         preds = incident.get("predictions", [])
         anoms = incident.get("anomalies", [])
@@ -394,17 +413,26 @@ LANGUAGE REQUIREMENT: All textual fields MUST be strictly written in '{language}
         for a in anoms:
             symptoms.append(a.get("message") or a.get("type", "Anomalia"))
         if not symptoms:
-            symptoms = ["Degradação pontual de telemetria e saturação de recursos computacionais."]
+            symptoms = [
+                "Degradação pontual de telemetria e saturação de recursos computacionais."
+            ]
 
         rca_text = ""
         if insights:
-            rca_text = insights[0].get("probable_root_cause") or insights[0].get("title", "")
+            rca_text = insights[0].get("probable_root_cause") or insights[0].get(
+                "title", ""
+            )
         if not rca_text:
             rca_text = "Anomalia comportamental detectada pelo motor preditivo de AIOps antes de impactar os usuários."
 
         rem_text = ""
         if rems:
-            rem_text = "; ".join([r.get("message") or r.get("action", "Remediação executada") for r in rems])
+            rem_text = "; ".join(
+                [
+                    r.get("message") or r.get("action", "Remediação executada")
+                    for r in rems
+                ]
+            )
         else:
             rem_text = "Executado Rollout Restart preventivo e normalização dos pods no cluster Kubernetes."
 
@@ -429,11 +457,11 @@ LANGUAGE REQUIREMENT: All textual fields MUST be strictly written in '{language}
                 "1. Revisar limits e requests de CPU/Memória nos manifestos Kubernetes do ArgoCD.",
                 "2. Validar pool de conexões com o Cloud SQL PostgreSQL para evitar saturação.",
                 "3. Monitorar taxa de consumo e dead-letter queue no AWS SQS.",
-                "4. Ajustar gatilhos do KEDA para auto-scaling preditivo em picos de tráfego."
+                "4. Ajustar gatilhos do KEDA para auto-scaling preditivo em picos de tráfego.",
             ],
             "lessons_learned": [
                 "✅ A detecção proativa do AIOps preveniu indisponibilidade contratual de SLA para as ONGs.",
                 "✅ O tempo médio de resolução (MTTR) permaneceu abaixo da meta estipulada de 5 minutos.",
-                "✅ A correlação imediata de logs do Loki com métricas acelerou o diagnóstico da causa raiz."
-            ]
+                "✅ A correlação imediata de logs do Loki com métricas acelerou o diagnóstico da causa raiz.",
+            ],
         }

@@ -156,7 +156,9 @@ class K8sClient:
             "message": "",
         }
         if not self.core_api:
-            res["message"] = "Kubernetes client não inicializado (fora do cluster ou sem kube-config)."
+            res["message"] = (
+                "Kubernetes client não inicializado (fora do cluster ou sem kube-config)."
+            )
             return res
         try:
             ns_list = self.core_api.list_namespace(limit=1, _request_timeout=3)
