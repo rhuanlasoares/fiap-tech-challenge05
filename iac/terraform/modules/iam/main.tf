@@ -87,6 +87,10 @@ resource "google_project_iam_member" "sa_identity_gke_loki_bucket" {
   member  = "serviceAccount:${var.project_id}.svc.id.goog[monitoring-ns/sa-gke]"
 }
 
+# ------------------------------------------------------------------------------
+# Workload Identity Federation (GitHub Actions CI/CD) Permissions
+# ------------------------------------------------------------------------------
+
 resource "google_project_iam_member" "gke_permissions" {
   project = var.project_id
   role    = "roles/container.developer"
@@ -96,5 +100,11 @@ resource "google_project_iam_member" "gke_permissions" {
 resource "google_project_iam_member" "sql_permissions" {
   project = var.project_id
   role    = "roles/cloudsql.client"
+  member  = var.sa_wifederation_member
+}
+
+resource "google_project_iam_member" "artreg_permissions" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
   member  = var.sa_wifederation_member
 }
