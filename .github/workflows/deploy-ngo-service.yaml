@@ -3,10 +3,10 @@ name: 🔐 Pipeline — ngo-service (Python)
 on:
   push:
     branches: [main]
-    paths: ["apps/ngo-service/**"]
+    paths: ["apps/ngo-service/**", ".github/workflows/deploy-ngo-service.yaml"]
   pull_request:
     branches: [main]
-    paths: ["apps/ngo-service/**"]
+    paths: ["apps/ngo-service/**", ".github/workflows/deploy-ngo-service.yaml"]
   workflow_dispatch:
 
 concurrency:
@@ -96,23 +96,23 @@ jobs:
       TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-  # build-push-gitops:
-  #   name: 🚀 Build, Push and Update GitOps Manifests
-  #   if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-  #   needs: [container-scan, dast]
-  #   permissions:
-  #     contents: write
-  #     id-token: write
-  #   timeout-minutes: 20
-  #   uses: ./.github/workflows/build-push-gitops.yaml
-  #   with:
-  #     imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-ngo-sa/ngo-service
-  #     imageTag: ${{ github.sha }}
-  #     nameService: ngo-service
-  #     region: southamerica-east1
-  #     service_path: apps/ngo-service
-  #   secrets:
-  #     PROJECT_ID: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}
-  #     WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
-  #     SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
-  #     TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build-push-gitops:
+    name: 🚀 Build, Push and Update GitOps Manifests
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    needs: [container-scan, dast]
+    permissions:
+      contents: write
+      id-token: write
+    timeout-minutes: 20
+    uses: ./.github/workflows/build-push-gitops.yaml
+    with:
+      imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-ngo-sa/ngo-service
+      imageTag: ${{ github.sha }}
+      nameService: ngo-service
+      region: southamerica-east1
+      service_path: apps/ngo-service
+    secrets:
+      PROJECT_ID: ${{ secrets.PROJECT_ID || 'naconfeitaria' }}
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
