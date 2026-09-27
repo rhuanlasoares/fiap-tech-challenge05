@@ -107,7 +107,7 @@ jobs:
     with:
       imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-donation-sa/donation-service
       imageTag: ${{ github.sha }}
-      nameService: donation-service
+      nameService: microsservices/donation-service
       region: southamerica-east1
       service_path: apps/donation-service
     secrets:

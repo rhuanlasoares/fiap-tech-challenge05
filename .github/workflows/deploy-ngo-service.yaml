@@ -107,7 +107,7 @@ jobs:
     with:
       imageName: southamerica-east1-docker.pkg.dev/naconfeitaria/artreg-ngo-sa/ngo-service
       imageTag: ${{ github.sha }}
-      nameService: ngo-service
+      nameService: microsservices/ngo-service
       region: southamerica-east1
       service_path: apps/ngo-service
     secrets:
