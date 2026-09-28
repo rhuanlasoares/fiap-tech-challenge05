@@ -180,22 +180,6 @@ Todos os relatórios executivos, planos de continuidade, guias SRE e documentaç
 
 ---
 
-## 🎬 Roteiro de Demonstração em Vídeo (Até 20 Minutos)
-
-A estrutura recomendada para a gravação do vídeo de avaliação divide a apresentação em duas partes:
-
-1. **Parte 1: Pitch Executivo para Diretoria (00:00 - 07:00)**:
-   - Apresentação do desafio da ONG, impacto social, PCN com RPO $< 5\text{s}$ e RTO $< 2\text{m}$, redução de 56% no Forecast FinOps e governança com SLAs/SLOs.
-2. **Parte 2: Demo Técnica Operacional (07:00 - 20:00)**:
-   - **ATO 1**: Linha de Base (Grafana SRE SLO Dashboard, New Relic APM e ArgoCD Synced).
-   - **ATO 2**: Caos de Infraestrutura (Drenagem de nó do GKE, PDB, HPA e Zero Downtime).
-   - **ATO 3**: Self-Healing de Release (Deploy com erro, Argo Rollouts Auto-Rollback).
-   - **ATO 4**: AIOps Preditivo (Detecção de Memory Leak, Gemini GenAI RCA, Slack Post-Mortem).
-   - **ATO 5**: Disaster Recovery de Banco (Falha no Cloud SQL Master, Promoção da réplica em `us-east1`).
-   - **ATO 6**: DR de Cluster & Backup (Restauração via Velero GCS + Ativação GKE DR no Terraform).
-
----
-
 ## 👥 Identificação da Equipe
 
 * **Instituição**: FIAP — Pós-Graduação em Cloud & DevOps / SRE
